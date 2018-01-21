@@ -3,6 +3,6 @@ defmodule DaisyTest do
   doctest Daisy
 
   test "greets the world" do
-    assert Daisy.hello() == :world
+    assert Daisy.blockchain() == :ok
   end
 end

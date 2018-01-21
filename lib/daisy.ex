@@ -3,16 +3,8 @@ defmodule Daisy do
   Documentation for Daisy.
   """
 
-  @doc """
-  Hello world.
-
-  ## Examples
-
-      iex> Daisy.hello
-      :world
-
-  """
-  def hello do
-    :world
+  def blockchain do
+    :ok
   end
+
 end
