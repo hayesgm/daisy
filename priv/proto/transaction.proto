@@ -2,7 +2,14 @@ syntax = "proto3";
 
 package Daisy.Data;
 
-message Transaction {
+import "signature.proto";
+
+message Invokation {
 	string function = 1;
 	repeated string args = 2;
+}
+
+message Transaction {
+	Invokation invokation = 1;
+	Signature signature = 2;
 }

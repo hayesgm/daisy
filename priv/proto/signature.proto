@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package Daisy.Data;
+
+message Signature {
+	bytes signature = 1;
+	bytes public_key = 2;
+}

@@ -82,8 +82,8 @@ defmodule Kitten do
     @first_names ["mittens", "thomas", "frederick", "bubba"]
     @titles ["the cool", "the wise", "the timid", "the adorable"]
 
-    @spec run_transaction(Daisy.Data.Transaction.t, identifier(), Daisy.Storage.root_hash) :: {:ok, Daisy.Runner.transaction_result} | {:error, any()}
-    def run_transaction(%Daisy.Data.Transaction{function: "spawn", args: [_cooldown]}, storage_pid, initial_storage) do
+    @callback run_transaction(Daisy.Data.Invokation.t, identifier(), Daisy.Storage.root_hash, binary()) :: {:ok, Daisy.Runner.transaction_result} | {:error, any()}
+    def run_transaction(%Daisy.Data.Invokation{function: "spawn", args: [_cooldown]}, storage_pid, initial_storage, owner) do
       # Generate a new random identifier and name
       first_name = @first_names |> Enum.random
       title = @titles |> Enum.random
@@ -112,7 +112,7 @@ defmodule Kitten do
       {:ok, %{
         final_storage: storage_with_kitten_as_orphan,
         logs: [
-          "Added new kitten #{kitten.uuid}"
+          "Added new kitten #{kitten.uuid} from owner #{inspect owner}"
         ],
         debug: inspect kitten
       }}

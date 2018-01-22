@@ -11,12 +11,13 @@ defmodule Daisy.Runner do
     debug: String.t
   }
 
-  @callback run_transaction(Daisy.Data.Transaction.t, identifier(), Daisy.Storage.root_hash) :: {:ok, transaction_result} | {:error, any()}
+  @callback run_transaction(Daisy.Data.Invokation.t, identifier(), Daisy.Storage.root_hash, binary()) :: {:ok, Daisy.Runner.transaction_result} | {:error, any()}
 
   @doc """
   Runs each transaction successively until all have been run.
 
   TODO: This may be where we want to parallelize execution.
+  TODO: We probably want to handle errors (like invalid signature) more gracefully.
   """
   @spec process_transactions([Daisy.Data.Transaction.t], identifier(), Daisy.Storage.root_hash, runner) :: {:ok, Daisy.Storage.root_hash, [Daisy.Data.Receipt.t]} | {:error, any()}
   def process_transactions(transactions, storage_pid, initial_storage, runner) do
@@ -41,20 +42,33 @@ defmodule Daisy.Runner do
   """
   @spec process_transaction(Daisy.Data.Transaction.t, identifier(), Daisy.Storage.root_hash, runner) :: {:ok, Daisy.Data.Receipt.t} | {:error, any()}
   def process_transaction(transaction, storage_pid, initial_storage, runner) do
-    with {:ok, transaction_result} <- runner.run_transaction(transaction, storage_pid, initial_storage) do
-      status = Map.get(transaction_result, :status, :OK)
-      final_storage = Map.get(transaction_result, :final_storage, initial_storage)
-      logs = Map.get(transaction_result, :logs, [])
-      debug = Map.get(transaction_result, :debug, nil)
+    with {:ok, public_key} <- verify_invokation(transaction) do
+      with {:ok, transaction_result} <- runner.run_transaction(transaction.invokation, storage_pid, initial_storage, public_key) do
+        status = Map.get(transaction_result, :status, :OK)
+        final_storage = Map.get(transaction_result, :final_storage, initial_storage)
+        logs = Map.get(transaction_result, :logs, [])
+        debug = Map.get(transaction_result, :debug, nil)
 
-      {:ok, Daisy.Data.Receipt.new(
-        status: Daisy.Data.Receipt.Status.value(status),
-        initial_storage: initial_storage,
-        final_storage: final_storage,
-        logs: logs,
-        debug: debug
-      )}
+        {:ok, Daisy.Data.Receipt.new(
+          status: Daisy.Data.Receipt.Status.value(status),
+          initial_storage: initial_storage,
+          final_storage: final_storage,
+          logs: logs,
+          debug: debug
+        )}
+      end
     end
+  end
+
+  @doc """
+  Verifies an invokation is valid, returning, if valid, the public key
+  of the signer.
+  """
+  @spec verify_invokation(Daisy.Data.Transaction.t) :: {:ok, binary()} | {:error, any()}
+  def verify_invokation(%Daisy.Data.Transaction{invokation: invokation, signature: signature}) do
+    invokation
+    |> Daisy.Data.Invokation.encode()
+    |> Daisy.Signature.verify_signature(signature)
   end
 
 end
