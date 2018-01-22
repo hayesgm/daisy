@@ -1,5 +1,7 @@
 # Daisy
 
+![Daisy Chain](https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Daisy_chain.JPG/1200px-Daisy_chain.JPG)
+
 Daisy is a simple, but fully featured blockchain with a pluggable VM. The goal of Daisy is to make it trivially simple to build a side-chain which can accept thousands of transactions per second. Daisy is backed by `ipfs` which makes it trivially easy for anyone to read, verify or explore the chain. We have designed Daisy to easily bridge to and from other block chains (e.g. Ethereum), so clients can easily move assets on to and off of a Daisy chain.
 
 ## Installation
