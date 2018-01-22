@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package Daisy.Data;
+
+message Receipt {
+	enum Status {
+		OK = 0;
+	}
+
+	Status status = 1;
+	string initial_storage = 2;
+	string final_storage = 3;
+	repeated string logs = 4;
+	string debug = 5;
+}

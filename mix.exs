@@ -28,7 +28,9 @@ defmodule Daisy.Mixfile do
   defp deps do
     [
       {:ex_doc, ">= 0.0.0", only: :dev},
-      {:ipfs_client, path: "../elixir-ipfs-client"},
+      {:ipfs_client, github: "hayesgm/elixir-ipfs-client", branch: "hayesgm/add-potent-operations"},
+      {:protobufex, github: "hayesgm/protobuf-elixir", branch: "hayesgm/extensions-ex"},
+      {:uuid, "~> 1.1"}
     ]
   end
 end

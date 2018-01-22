@@ -1,5 +1,6 @@
 defmodule Daisy.StorageTest do
   use ExUnit.Case, async: true
+  alias Daisy.Storage
 
   setup_all do
     {:ok, server} = Storage.start_link()
@@ -86,10 +87,10 @@ defmodule Daisy.StorageTest do
     test "it puts a new file or updates an existing", %{server: server} do
       {:ok, root_hash} = Storage.new(server)
 
-      {:ok, new_root_hash} = Storage.update(server, root_hash, "players/5/name", fn name -> "#{name}, the great" end, "thomas")
+      {:ok, new_root_hash} = Storage.update(server, root_hash, "players/5/name", fn name -> "#{name}, the great" end, default: "thomas")
       assert {:ok, "thomas"} == Storage.get(server, new_root_hash, "players/5/name")
 
-      {:ok, final_root_hash} = Storage.update(server, new_root_hash, "players/5/name", fn name -> "#{name}, the great" end, "thomas")
+      {:ok, final_root_hash} = Storage.update(server, new_root_hash, "players/5/name", fn name -> "#{name}, the great" end, default: "thomas")
       assert {:ok, "thomas, the great"} == Storage.get(server, final_root_hash, "players/5/name")
     end
   end
