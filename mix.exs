@@ -31,6 +31,7 @@ defmodule Daisy.Mixfile do
       {:ipfs_client, github: "hayesgm/elixir-ipfs-client", branch: "hayesgm/add-potent-operations"},
       {:protobufex, github: "hayesgm/protobuf-elixir", branch: "hayesgm/extensions-ex"},
       {:uuid, "~> 1.1"},
+      {:base58check, github: "lukaszsamson/base58check"},
     ]
   end
 end

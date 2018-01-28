@@ -8,9 +8,9 @@ defmodule Daisy.Reader do
 
   @callback read(identifier(), String.t, String.t, [String.t]) :: {:ok, any()} | {:erorr, any()}
 
-  @spec read(Daisy.Block.t, identifier(), reader, String.t, [String.t]) :: {:ok, any()} | {:error, any()}
-  def read(block, storage_pid, reader, function, args) do
-    reader.read(storage_pid, block.final_storage, reader, function, args)
+  @spec read(Daisy.Block.t, identifier(), String.t, [String.t], reader) :: {:ok, any()} | {:error, any()}
+  def read(block, storage_pid, function, args, reader) do
+    reader.read(storage_pid, block.final_storage, function, args)
   end
 
 end

@@ -104,6 +104,8 @@ defmodule Daisy.StorageTest do
       {:ok, root_hash} = Storage.new(server)
 
       {:ok, root_hash_1} = Storage.put_all(server, root_hash, %{
+        "coaches" => %{},
+        "meta" => "",
         "players" => %{
           "tim" => %{
             "name" => "tim",
@@ -114,7 +116,8 @@ defmodule Daisy.StorageTest do
               },
               "1" => %{
                 "date" => "Jan 2",
-                "score" => "20"
+                "score" => "20",
+                "extra" => %{}
               }
             }
           }
@@ -183,6 +186,35 @@ defmodule Daisy.StorageTest do
       assert {:ok, ""} == Storage.get(server, root_hash_2, "players/tim/scores/2")
       assert {:ok, "Jan 3"} == Storage.get(server, root_hash_2, "players/tim/scores/2/date")
       assert {:ok, "30"} == Storage.get(server, root_hash_2, "players/tim/scores/2/score")
+    end
+  end
+
+  describe "#get_all/2" do
+    test "it should return all values", %{server: server} do
+      {:ok, root_hash} = Storage.new(server)
+
+      map = %{
+        "players" => %{
+          "tim" => %{
+            "name" => "tim",
+            "scores" => %{
+              "0" => %{
+                "date" => "Jan 1",
+                "score" => "15"
+              },
+              "1" => %{
+                "date" => "Jan 2",
+                "score" => "20"
+              }
+            }
+          }
+        }
+      }
+
+      {:ok, root_hash_1} = Storage.put_all(server, root_hash, map)
+
+      assert Storage.get_all(server, root_hash) == {:ok, %{}}
+      assert Storage.get_all(server, root_hash_1) == {:ok, map}
     end
   end
 
