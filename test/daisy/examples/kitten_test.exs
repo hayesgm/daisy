@@ -19,13 +19,13 @@ defmodule Daisy.KittenTest do
       storage_pid: storage_pid,
       genesis_block: genesis_block,
       genesis_block_hash: genesis_block_hash} do
-    new_block = Daisy.Block.new_block(genesis_block_hash, storage_pid, [])
+    {:ok, new_block} = Daisy.Block.new_block(genesis_block_hash, storage_pid, [])
 
     assert {:ok, processed_block, _new_block_hash} =
       Daisy.Block.process_and_save_block(new_block, storage_pid, Kitten.Runner)
 
     assert processed_block == %Daisy.Data.Block{
-      previous_block_hash: "QmZUTgAjzmNN8f9RTF53oQnegkGsCWJEeA8qyPjbJ2Es2b",
+      previous_block_hash: "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26",
       initial_storage: genesis_block.initial_storage,
       final_storage: genesis_block.initial_storage,
       transactions: [],
@@ -35,22 +35,15 @@ defmodule Daisy.KittenTest do
 
   test "it should process a simple block with one transaction", %{
       storage_pid: storage_pid,
-      genesis_block: genesis_block,
       genesis_block_hash: genesis_block_hash,
       user_1_keypair: user_1_keypair} do
 
     invokation = Daisy.Data.Invokation.new(function: "spawn", args: ["5000"])
 
-    new_block = Daisy.Block.new_block(
+    {:ok, new_block} = Daisy.Block.new_block(
       genesis_block_hash,
       storage_pid, [
-        Daisy.Data.Transaction.new(
-          invokation: invokation,
-          signature: Daisy.Signature.sign(
-            Daisy.Data.Invokation.encode(invokation),
-            user_1_keypair
-          )
-        )
+        Daisy.Keychain.sign_new_transaction(invokation, user_1_keypair)
     ])
 
     new_block_initial_storage = new_block.initial_storage

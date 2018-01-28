@@ -1,11 +1,32 @@
 defmodule Daisy.Block do
   @moduledoc """
-  Module for handling operations on blocks. The data for blocks is stored in
-  a `Daisy.Data.Block` proto.
+  Module for handling operations on Daisy-chained blocks.
+
+  This module generally handles how blocks are processed. A block with a given
+  set of transactions is processed, which runs all transactions and generates
+  receipts for each one. That block is then stored in IPFS with a unix-like
+  file system.
+
+  For example, you can view `/ipfs/<block_hash>/transactions` to see the
+  transactions which are included in a block, or `ipfs/<block_hash>/final_storage`
+  to get the IPFS hash of the storage for the block.
   """
+  @serializer Daisy.Serializer.JSONSerializer
 
   @doc """
   Generates an empty genesis block.
+
+  ## Examples
+
+      iex> {:ok, storage_pid} = Daisy.Storage.start_link()
+      iex> Daisy.Block.genesis_block(storage_pid)
+      {:ok, %Daisy.Data.Block{
+        previous_block_hash: "",
+        initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+        final_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+        transactions: [],
+        receipts: [],
+      }}
   """
   @spec genesis_block(identifier()) :: {:ok, Daisy.Data.Block.t} | {:error, any()}
   def genesis_block(storage_pid) do
@@ -20,28 +41,82 @@ defmodule Daisy.Block do
 
   @doc """
   Generates a new block with the given transactions from a previous block.
+
+  ## Examples
+
+      iex> {:ok, storage_pid} = Daisy.Storage.start_link()
+      iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
+      iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
+      iex> Daisy.Block.new_block(block_hash, storage_pid, [])
+      {:ok,
+        %Daisy.Data.Block{final_storage: "",
+        initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+        previous_block_hash: "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26",
+        receipts: [],
+        transactions: []
+      }}
+
+      # TODO: Test with transactions
   """
   @spec new_block(Daisy.Storage.root_hash, identifier(), [Daisy.Data.Transaction.t]) :: {:ok, Daisy.Data.Block.t} | {:error, any()}
   def new_block(previous_block_hash, storage_pid, transactions) do
-    with {:ok, block_data} <- Daisy.Storage.retrieve(storage_pid, previous_block_hash) do
-      previous_block = Daisy.Data.Block.decode(block_data)
-
-      Daisy.Data.Block.new(
+    with {:ok, previous_block_final_storage} <- final_storage(previous_block_hash, storage_pid) do
+      {:ok, Daisy.Data.Block.new(
         previous_block_hash: previous_block_hash,
-        initial_storage: previous_block.final_storage,
+        initial_storage: previous_block_final_storage,
         transactions: transactions
-      )
+      )}
+    end
+  end
+
+  @doc """
+  Retrieves just the final storage of a block, forgoing pulling in the entire
+  contents of the block.
+
+  ## Examples
+
+      iex> {:ok, storage_pid} = Daisy.Storage.start_link()
+      iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
+      iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
+      iex> Daisy.Block.final_storage(block_hash, storage_pid)
+      {:ok, "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n"}
+  """
+  @spec final_storage(Daisy.Storage.root_hash, identifier()) :: {:ok, Daisy.Storage.root_hash} | {:error, any()}
+  def final_storage(root_hash, storage_pid) do
+    case Daisy.Storage.get(storage_pid, root_hash, "block/final_storage") do
+      {:ok, final_storage} -> {:ok, final_storage}
+      :not_found -> Daisy.Storage.new(storage_pid)
+      els -> els
     end
   end
 
   @doc """
   Helper function to process the block (run the transactions) and save the result
   to IPFS.
+
+  ## Examples
+
+      iex> keypair = Daisy.Signature.new_keypair()
+      iex> {:ok, storage_pid} = Daisy.Storage.start_link()
+      iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
+      iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
+      iex> {:ok, new_block} = Daisy.Block.new_block(block_hash, storage_pid, [])
+      iex> Daisy.Block.process_and_save_block(new_block, storage_pid, Daisy.Examples.Test.Runner)
+      {:ok,
+        %Daisy.Data.Block{
+          previous_block_hash: "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26",
+          initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+          final_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+          transactions: [],
+          receipts: [],
+        },
+        "QmdU2KH5vCFFdbWonT1GB7y15AZZoxsthViDuBLa5EwhAm"
+      }
   """
   @spec process_and_save_block(Daisy.Data.Block.t, identifier(), Daisy.Runner.runner) :: {:ok, Daisy.Data.Block.t, Daisy.Storage.root_hash} | {:error, any()}
   def process_and_save_block(block, storage_pid, runner) do
     with {:ok, processed_block} <- process_block(block, storage_pid, runner) do
-      with {:ok, data_hash} <- save_block(block, storage_pid) do
+      with {:ok, data_hash} <- save_block(processed_block, storage_pid) do
         {:ok, processed_block, data_hash}
       end
     end
@@ -49,17 +124,87 @@ defmodule Daisy.Block do
 
   @doc """
   Saves a block into IPFS and computes the block hash.
+
+  ## Examples
+
+      iex> {:ok, storage_pid} = Daisy.Storage.start_link()
+      iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
+      iex> Daisy.Block.save_block(genesis_block, storage_pid)
+      {:ok, "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26"}
   """
   @spec save_block(Daisy.Data.Block.t, identifier()) :: {:ok, Daisy.Storage.root_hash} | {:error, any()}
   def save_block(block, storage_pid) do
-    encoded_block = Daisy.Data.Block.encode(block)
+    with {:ok, new_root_hash} <- Daisy.Storage.new(storage_pid) do
+      serialized_block = @serializer.serialize(block)
 
-    Daisy.Storage.save(storage_pid, encoded_block)
+      Daisy.Storage.put_all(
+        storage_pid,
+        new_root_hash,
+        serialized_block
+      )
+    end
+  end
+
+  @doc """
+  Loads a complete block from IPFS. De-serialization requires loading all
+  data that was stored in IPFS (minus long-term storage), and thus should
+  not be called unless necessary.
+
+  ## Examples
+
+      iex> {:ok, storage_pid} = Daisy.Storage.start_link()
+      iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
+      iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
+      iex> Daisy.Block.load_block(storage_pid, block_hash)
+      {:ok, %Daisy.Data.Block{
+        final_storage: nil,
+        initial_storage: nil,
+        previous_block_hash: "",
+        receipts: [],
+        transactions: []
+      }}
+  """
+  @spec load_block(identifier(), Daisy.Storage.root_hash) :: {:ok, Daisy.Data.Block.t} | {:error, any()}
+  def load_block(storage_pid, block_hash) do
+    with {:ok, values} <- Daisy.Storage.get_all(storage_pid, block_hash) do
+      block_values = values["block"]
+      block = @serializer.deserialize(block_values)
+
+      {:ok, block}
+    end
   end
 
   @doc """
   For a given block, processes each transaction, computing the receipts
   and `final_storage`.
+
+  ## Examples
+
+      iex> keypair = Daisy.Signature.new_keypair()
+      iex> trx_1 = Daisy.Keychain.sign_new_transaction(%Daisy.Data.Invokation{function: "test", args: ["1", "2"]}, keypair)
+      iex> trx_2 = Daisy.Keychain.sign_new_transaction(%Daisy.Data.Invokation{function: "test", args: ["3", "4"]}, keypair)
+      iex> {:ok, storage_pid} = Daisy.Storage.start_link()
+      iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
+      iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
+      iex> {:ok, new_block} = Daisy.Block.new_block(block_hash, storage_pid, [trx_1, trx_2])
+      iex> {:ok, processed_block} = Daisy.Block.process_block(new_block, storage_pid, Daisy.Examples.Test.Runner)
+      iex> processed_block.receipts
+      [
+        %Daisy.Data.Receipt{
+          status: 0,
+          initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+          final_storage: "QmTvLAzU3Z3Bw72gw7Vqrgxr3orgLRGQQruSS6UXYA617b",
+          logs: ["Added 1 and 2 to get 3"],
+          debug: "[1, 2, 3]",
+        },
+        %Daisy.Data.Receipt{
+          status: 0,
+          initial_storage: "QmTvLAzU3Z3Bw72gw7Vqrgxr3orgLRGQQruSS6UXYA617b",
+          final_storage: "QmUxEkEjcqxxdBZwo9B6uPbbEWWnFk72vyRsqHda84YoCj",
+          logs: ["Added 3 and 4 to get 7"],
+          debug: "[3, 4, 7]",
+        }
+      ]
   """
   @spec process_block(Daisy.Data.Block.t, identifier(), Daisy.Runner.runner) :: {:ok, Daisy.Data.Block.t} | {:error, any()}
   def process_block(block, storage_pid, runner) do
@@ -74,10 +219,23 @@ defmodule Daisy.Block do
   Executes a function to read its value (without affecting any state).
 
   TODO: What types should args and the result be? Currently, we have strings???
+
+  ## Examples
+
+      iex> keypair = Daisy.Signature.new_keypair()
+      iex> trx_1 = Daisy.Keychain.sign_new_transaction(%Daisy.Data.Invokation{function: "test", args: ["1", "2"]}, keypair)
+      iex> trx_2 = Daisy.Keychain.sign_new_transaction(%Daisy.Data.Invokation{function: "test", args: ["3", "4"]}, keypair)
+      iex> {:ok, storage_pid} = Daisy.Storage.start_link()
+      iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
+      iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
+      iex> {:ok, new_block} = Daisy.Block.new_block(block_hash, storage_pid, [trx_1, trx_2])
+      iex> {:ok, processed_block} = Daisy.Block.process_block(new_block, storage_pid, Daisy.Examples.Test.Runner)
+      iex> Daisy.Block.read(processed_block, storage_pid, "result", [], Daisy.Examples.Test.Reader)
+      {:ok, 7}
   """
-  @spec read(Daisy.Data.Block.t, identifier(), Daisy.Reader.reader, String.t, [String.t]) :: String.t
-  def read(block, storage_pid, reader, function, args) do
-    Daisy.Reader.read(block, storage_pid, reader, function, args)
+  @spec read(Daisy.Data.Block.t, identifier(), String.t, [String.t], Daisy.Reader.reader) :: String.t
+  def read(block, storage_pid, function, args, reader) do
+    Daisy.Reader.read(block, storage_pid, function, args, reader)
   end
 
 end

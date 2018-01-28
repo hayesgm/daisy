@@ -41,6 +41,12 @@ defmodule Daisy.Storage do
     {:reply, put_all_result, state}
   end
 
+  def handle_call({:get_all, root_hash}, _from, %{client: client}=state) do
+    get_all_result = ipfs_get_all(client, root_hash)
+
+    {:reply, get_all_result, state}
+  end
+
   def handle_call({:put_new, root_hash, path, data}, _from, %{client: client}=state) do
     # Note: This might be slow since we need to walk entire path to find file
     result = case walk_path(client, path, root_hash) do
@@ -167,6 +173,9 @@ defmodule Daisy.Storage do
   @spec ipfs_put_all(IPFS.Client.t, root_hash, %{}) :: {:ok, binary()} | {:error, any()}
   def ipfs_put_all(client, root_hash, values) do
     Enum.reduce(values, {:ok, root_hash}, fn
+      {path, val}, {:ok, current_hash} when val == "" or val == %{} ->
+        # Skip blank nodes / maps
+        {:ok, current_hash}
       {path, data}, {:ok, current_hash} when is_binary(data) ->
         # Put a simple value
         ipfs_put(client, current_hash, path, data)
@@ -188,10 +197,51 @@ defmodule Daisy.Storage do
     end)
   end
 
+  @spec ipfs_get_all(IPFS.Client.t, root_hash) :: {:ok, %{}} | {:error, any()}
+  def ipfs_get_all(client, root_hash) do
+    case do_ipfs_get_all(client, root_hash) do
+      {:ok, map} when is_map(map) ->
+        {:ok, map}
+      {:ok, data} when is_binary(data) ->
+        {:error, "expected root, got data: #{inspect data}"}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  @spec do_ipfs_get_all(IPFS.Client.t, root_hash) :: {:ok, %{} | String.t} | {:error, any()}
+  defp do_ipfs_get_all(client, root_hash) do
+    case ipfs_retrieve_all(client, root_hash) do
+      {:ok, <<>>, links} ->
+        # This can probably be parallelized
+        Enum.reduce(links, {:ok, %{}}, fn
+          {name, hash}, {:ok, map} ->
+            with {:ok, result} = do_ipfs_get_all(client, hash) do
+              {:ok, Map.put(map, name, result)}
+            end
+          _, {:error, error} -> {:error, error}
+        end)
+      {:ok, data, []} ->
+        {:ok, data}
+      {:ok, data, links} -> {:error, "got both data and links, data=#{inspect data}, links=#{inspect links}"}
+      {:error, error} -> {:error, error}
+    end
+  end
+
   @spec ipfs_retrieve(IPFS.Client.t, data_hash) :: {:ok, binary()} | {:error, any()}
   defp ipfs_retrieve(client, data_hash) do
     with {:ok, %IPFS.Client.Object{data: data}} <- IPFS.Client.object_get(client, data_hash) do
       {:ok, data}
+    end
+  end
+
+  @spec ipfs_retrieve_all(IPFS.Client.t, data_hash) :: {:ok, String.t, [{String.t, String.t}]} | {:error, any()}
+  defp ipfs_retrieve_all(client, data_hash) do
+    with {:ok, %IPFS.Client.Object{data: data, links: links}} <- IPFS.Client.object_get(client, data_hash) do
+      simple_links = for link <- links do
+        {link.name, link.hash}
+      end
+
+      {:ok, data, simple_links}
     end
   end
 
@@ -259,6 +309,11 @@ defmodule Daisy.Storage do
   @spec get(identifier(), root_hash, String.t) :: {:ok, String.t} | :not_found | {:error, any()}
   def get(server, root_hash, path) do
     GenServer.call(server, {:get, root_hash, path})
+  end
+
+  @spec get_all(identifier(), root_hash) :: {:ok, %{}} | {:error, any()}
+  def get_all(server, root_hash) do
+    GenServer.call(server, {:get_all, root_hash})
   end
 
   @spec proof(identifier(), root_hash, String.t) :: :ok | :not_found | {:error, any()}
