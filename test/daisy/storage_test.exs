@@ -99,6 +99,93 @@ defmodule Daisy.StorageTest do
     end
   end
 
+  describe "#put_all/3" do
+    test "it should add a whole tree of values", %{server: server} do
+      {:ok, root_hash} = Storage.new(server)
+
+      {:ok, root_hash_1} = Storage.put_all(server, root_hash, %{
+        "players" => %{
+          "tim" => %{
+            "name" => "tim",
+            "scores" => %{
+              "0" => %{
+                "date" => "Jan 1",
+                "score" => "15"
+              },
+              "1" => %{
+                "date" => "Jan 2",
+                "score" => "20"
+              }
+            }
+          }
+        }
+      })
+
+      assert {:ok, "tim"} == Storage.get(server, root_hash_1, "players/tim/name")
+      assert :not_found == Storage.get(server, root_hash_1, "players/tim/age")
+      assert {:ok, ""} == Storage.get(server, root_hash_1, "players/tim/scores")
+      assert {:ok, ""} == Storage.get(server, root_hash_1, "players/tim/scores/0")
+      assert {:ok, "Jan 1"} == Storage.get(server, root_hash_1, "players/tim/scores/0/date")
+      assert {:ok, "15"} == Storage.get(server, root_hash_1, "players/tim/scores/0/score")
+      assert {:ok, ""} == Storage.get(server, root_hash_1, "players/tim/scores/1")
+      assert {:ok, "Jan 2"} == Storage.get(server, root_hash_1, "players/tim/scores/1/date")
+      assert {:ok, "20"} == Storage.get(server, root_hash_1, "players/tim/scores/1/score")
+    end
+
+    test "it should handle updates gracefully", %{server: server} do
+      {:ok, root_hash} = Storage.new(server)
+
+      {:ok, root_hash_1} = Storage.put_all(server, root_hash, %{
+        "players" => %{
+          "tim" => %{
+            "name" => "tim",
+            "scores" => %{
+              "0" => %{
+                "date" => "Jan 1",
+                "score" => "15"
+              },
+              "1" => %{
+                "date" => "Jan 2",
+                "score" => "20"
+              }
+            }
+          }
+        }
+      })
+
+      {:ok, root_hash_2} = Storage.put_all(server, root_hash_1, %{
+        "players" => %{
+          "tim" => %{
+            "name" => "timothy",
+            "scores" => %{
+              "0" => %{
+                "date" => "Jan 1",
+                "score" => "15"
+              },
+              "2" => %{
+                "date" => "Jan 3",
+                "score" => "30"
+              }
+            }
+          }
+        }
+      })
+
+      assert {:ok, "timothy"} == Storage.get(server, root_hash_2, "players/tim/name")
+      assert :not_found == Storage.get(server, root_hash_2, "players/tim/age")
+      assert {:ok, ""} == Storage.get(server, root_hash_2, "players/tim/scores")
+      assert {:ok, ""} == Storage.get(server, root_hash_2, "players/tim/scores/0")
+      assert {:ok, "Jan 1"} == Storage.get(server, root_hash_2, "players/tim/scores/0/date")
+      assert {:ok, "15"} == Storage.get(server, root_hash_2, "players/tim/scores/0/score")
+      assert {:ok, ""} == Storage.get(server, root_hash_2, "players/tim/scores/1")
+      assert {:ok, "Jan 2"} == Storage.get(server, root_hash_2, "players/tim/scores/1/date")
+      assert {:ok, "20"} == Storage.get(server, root_hash_2, "players/tim/scores/1/score")
+      assert {:ok, ""} == Storage.get(server, root_hash_2, "players/tim/scores/2")
+      assert {:ok, "Jan 3"} == Storage.get(server, root_hash_2, "players/tim/scores/2/date")
+      assert {:ok, "30"} == Storage.get(server, root_hash_2, "players/tim/scores/2/score")
+    end
+  end
+
   describe "#proof/3" do
     test "it proves value at a simple path", %{server: server} do
       {:ok, root_hash} = Storage.new(server)
