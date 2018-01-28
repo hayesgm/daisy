@@ -40,9 +40,9 @@ defmodule Daisy.Storage do
   def handle_call({:put_new, root_hash, path, data}, _from, %{client: client}=state) do
     # Note: This might be slow since we need to walk entire path to find file
     result = case walk_path(client, path, root_hash) do
-      {:ok, [], _found_path, _data_hash} ->
+      {:ok, [], _found_path, _found_objects, _found_links, _data_hash} ->
         :file_exists
-      {:ok, _looking_path, _found_path, _sub_root_hash} ->
+      {:ok, _looking_path, _found_path, _found_objects, _found_links, _sub_root_hash} ->
         with {:ok, %IPFS.Client.PatchObject{hash: data_hash}} <- IPFS.Client.object_put(client, data, false) do
           # TODO: It would be nice to put the object at `sub_root_hash` and `_looking_path`, but we need to follow the links up to root
           #       which would require more HTTP calls.
@@ -95,15 +95,39 @@ defmodule Daisy.Storage do
     {:reply, retrieve_result, state}
   end
 
-  # Walks down a path as far as possible until it reaches the final path
-  # node or, if it fails, returns the last node on that path.
-  @spec walk_path(IPFS.Client.t, String.t, root_hash) :: {:ok, [String.t], [String.t], root_hash} | {:error, any()}
-  defp walk_path(client, path, root_hash) do
-    result = do_walk_path(client, Path.split(path), [], root_hash)
+  def handle_call({:proof, root_hash, path}, _from, %{client: client}=state) do
+    # We will walk the path to the root, grabbing the full data of each node on the way
+    result = case walk_path(client, path, root_hash) do
+      {:ok, [], _found_path, _found_objects, found_links, data_hash} ->
 
-    with {:ok, looking_path, found_path_reverse, root_hash} <- result do
-      {:ok, looking_path, found_path_reverse |> Enum.reverse, root_hash}
+        # We found a good path, let's now pull the protobuf version of each
+        # object we found along the way (that's our proof!)
+        protobuf_result = Enum.reduce([data_hash|found_links], {:ok, []}, fn
+          link, {:ok, protobufs} ->
+            with {:ok, protobuf} <- ipfs_retrieve_proto(client, link) do
+              {:ok, [protobuf|protobufs]}
+            end
+          _, {:error, error} ->
+            {:error, error}
+        end)
+
+        # TODO: We can verify data matches our expected data, if we want.
+        #       Otherwise, you might return proof that proves you wrong!
+
+        # Return the proof (protobufs) in reverse order
+        with {:ok, protobufs} <- protobuf_result do
+          {:ok, protobufs |> Enum.reverse}
+        end
+
+      # We didn't find the node we're looking for
+      {:ok, _looking_path, _found_path, _found_objects, _found_links, _data_hash} ->
+        :not_found
+
+      # We encountered an error
+      els -> els
     end
+
+    {:reply, result, state}
   end
 
   @spec ipfs_put(IPFS.Client.t, root_hash, String.t, String.t) :: {:ok, root_hash} | {:error, any()}
@@ -131,33 +155,51 @@ defmodule Daisy.Storage do
     end
   end
 
+  @spec ipfs_retrieve_proto(IPFS.Client.t, root_hash) :: {:ok, binary()} | {:error, any()}
+  defp ipfs_retrieve_proto(client, hash) do
+    with {:ok, proto} <- IPFS.Client.object_get_protobuf(client, hash) do
+      {:ok, proto}
+    end
+  end
+
   @spec ipfs_get(IPFS.Client.t, root_hash, String.t) :: {:ok, String.t} | :not_found | {:error, any()}
   defp ipfs_get(client, root_hash, path) do
     # Note: This might be slow since we need to walk entire path to find file
     case walk_path(client, path, root_hash) do
-      {:ok, [], _found_path, data_hash} ->
+      {:ok, [], _found_path, _found_objects, _found_links, data_hash} ->
         with {:ok, data} <- ipfs_retrieve(client, data_hash) do
           {:ok, data}
         end
-      {:ok, _looking_path, _found_path, _data_hash} -> :not_found
+      {:ok, _looking_path, _found_path, _found_objects, _found_links, _data_hash} -> :not_found
       els -> els
     end
   end
 
-  @spec do_walk_path(IPFS.Client.t, [String.t], [], root_hash) :: {:ok, [String.t], [String.t], root_hash} | {:error, any()}
-  defp do_walk_path(_client, [], found_path, root_hash), do: {:ok, [], found_path, root_hash}
-  defp do_walk_path(client, [sub_path|path]=looking_path, found_path, root_hash) do
+  # Walks down a path as far as possible until it reaches the final path
+  # node or, if it fails, returns the last node on that path.
+  @spec walk_path(IPFS.Client.t, String.t, root_hash) :: {:ok, [String.t], [String.t], [IPFS.Client.Object.t], root_hash} | {:error, any()}
+  defp walk_path(client, path, root_hash) do
+    result = do_walk_path(client, Path.split(path), [], [], [], root_hash)
+
+    with {:ok, looking_path, found_path_reverse, found_objects, found_links, root_hash} <- result do
+      {:ok, looking_path, found_path_reverse |> Enum.reverse, found_objects, found_links, root_hash}
+    end
+  end
+
+  @spec do_walk_path(IPFS.Client.t, [String.t], [String.t], [IPFS.Client.Object.t], [String.t], root_hash) :: {:ok, [String.t], [String.t], [IPFS.Client.Object.t], root_hash} | {:error, any()}
+  defp do_walk_path(_client, [], found_path, found_objects, found_links, root_hash), do: {:ok, [], found_path, found_objects, found_links, root_hash}
+  defp do_walk_path(client, [sub_path|path]=looking_path, found_path, found_objects, found_links, root_hash) do
     ipfs_result = IPFS.Client.object_get(client, root_hash)
 
-    with {:ok, %IPFS.Client.Object{links: links}} <- ipfs_result do
+    with {:ok, %IPFS.Client.Object{links: links}=object} <- ipfs_result do
       # Look for a link matching sub_path
       link = Enum.find(links, fn link -> link.name == sub_path end)
 
       # If we find it, recurse, otherwise, we're done
       if link do
-        do_walk_path(client, path, [sub_path|found_path], link.hash)
+        do_walk_path(client, path, [sub_path|found_path], [object|found_objects], [root_hash|found_links], link.hash)
       else
-        {:ok, looking_path, found_path, root_hash}
+        {:ok, looking_path, found_path, found_objects, found_links, root_hash}
       end
     end
   end
@@ -170,6 +212,11 @@ defmodule Daisy.Storage do
   @spec get(identifier(), root_hash, String.t) :: {:ok, String.t} | :not_found | {:error, any()}
   def get(server, root_hash, path) do
     GenServer.call(server, {:get, root_hash, path})
+  end
+
+  @spec proof(identifier(), root_hash, String.t) :: :ok | :not_found | {:error, any()}
+  def proof(server, root_hash, path) do
+    GenServer.call(server, {:proof, root_hash, path})
   end
 
   @spec put(identifier(), root_hash, String.t, binary()) :: {:ok, root_hash} | {:error, any()}
