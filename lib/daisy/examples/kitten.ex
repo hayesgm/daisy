@@ -7,11 +7,12 @@ defmodule Kitten do
   defmodule Data do
 
     defmodule Kitten do
-      defstruct [:uuid, :name]
+      defstruct [:uuid, :name, :owner]
 
       @type t :: %__MODULE__{
         uuid: String.t,
-        name: String.t
+        name: String.t,
+        owner: String.t | nil
       }
 
       @spec deserialize(String.t) :: t
@@ -20,7 +21,8 @@ defmodule Kitten do
 
         %__MODULE__{
           uuid: kitten_data["uuid"],
-          name: kitten_data["name"]
+          name: kitten_data["name"],
+          owner: kitten_data["owner"] |> Daisy.Encoder.maybe_decode_58!,
         }
       end
 
@@ -28,7 +30,8 @@ defmodule Kitten do
       def serialize(kitten) do
         %{
           "uuid" => kitten.uuid,
-          "name" => kitten.name
+          "name" => kitten.name,
+          "owner" => kitten.owner |> Daisy.Encoder.maybe_encode_58,
         } |> Poison.encode!
       end
     end
@@ -56,21 +59,33 @@ defmodule Kitten do
         orphan
         |> Kernel.++([uuid])
       end
+
+      @spec remove(t, String.t) :: t
+      def remove(orphan, uuid) do
+        orphan
+        |> Enum.reject(&(&1 == uuid))
+      end
     end
   end
 
   defmodule Reader do
     @behaviour Daisy.Reader
 
-    @spec read(identifier(), String.t, String.t, [String.t]) :: {:ok, any()} | {:erorr, any()}
-    def read(storage_pid, storage, "orphans", []) do
+    @spec read(String.t, [String.t], identifier(), Daisy.Storage.root_hash) :: {:ok, any()} | {:erorr, any()}
+    def read("orphans", [], storage_pid, storage) do
       with {:ok, orphan_json} <- Daisy.Storage.get(storage_pid, storage, "orphans") do
         {:ok, Data.Orphan.deserialize(orphan_json)}
       end
     end
 
-    def read(storage_pid, storage, "kitten", [uuid]) do
-      with {:ok, kitten_json} <- Daisy.Storage.get(storage_pid, storage, "/kitten/#{uuid}") do
+    def read("is_orphan?", [kitten_uuid], storage_pid, storage) do
+      with {:ok, orphans} <- read("orphans", [], storage_pid, storage) do
+        {:ok, Enum.member?(orphans, kitten_uuid)}
+      end
+    end
+
+    def read("kitten", [kitten_uuid], storage_pid, storage) do
+      with {:ok, kitten_json} <- Daisy.Storage.get(storage_pid, storage, "/kitten/#{kitten_uuid}") do
         {:ok, Data.Kitten.deserialize(kitten_json)}
       end
     end
@@ -116,6 +131,41 @@ defmodule Kitten do
         ],
         debug: inspect kitten
       }}
+    end
+
+    def run_transaction(%Daisy.Data.Invokation{function: "adopt", args: [kitten_uuid]}, storage_pid, storage_1, owner) do
+      # First, check to see that the kitten is up for adoption
+      case Reader.read("is_orphan?", [kitten_uuid], storage_pid, storage_1) do
+        {:ok, false} ->
+          {:ok, %{
+            status: :failure,
+            logs: ["Kitten #{kitten_uuid} not up for adoption"]
+          }}
+        {:error, error} -> {:error, error}
+        {:ok, true} ->
+          # Remove kitten from orphans
+          {:ok, storage_2} = Daisy.Storage.update(storage_pid, storage_1, "/orphans", fn orphan_json ->
+            orphan_json
+            |> Data.Orphan.deserialize
+            |> Data.Orphan.remove(kitten_uuid)
+            |> Data.Orphan.serialize
+          end)
+
+          # Add kitten as adopted
+          {:ok, storage_3} = Daisy.Storage.update(storage_pid, storage_2, "/kittens/#{kitten_uuid}", fn kitten_json ->
+            kitten_json
+            |> Data.Kitten.deserialize
+            |> Map.put(:owner, owner)
+            |> Data.Kitten.serialize
+          end)
+
+          {:ok, %{
+            final_storage: storage_3,
+            logs: [
+              "Owner #{inspect owner} adopted kitten #{kitten_uuid}"
+            ]
+          }}
+      end
     end
   end
 end

@@ -82,8 +82,8 @@ defmodule Daisy.Block do
       {:ok, "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n"}
   """
   @spec final_storage(Daisy.Storage.root_hash, identifier()) :: {:ok, Daisy.Storage.root_hash} | {:error, any()}
-  def final_storage(root_hash, storage_pid) do
-    case Daisy.Storage.get(storage_pid, root_hash, "block/final_storage") do
+  def final_storage(block_hash, storage_pid) do
+    case Daisy.Storage.get(storage_pid, block_hash, "block/final_storage") do
       {:ok, final_storage} -> {:ok, final_storage}
       :not_found -> Daisy.Storage.new(storage_pid)
       els -> els
@@ -96,7 +96,6 @@ defmodule Daisy.Block do
 
   ## Examples
 
-      iex> keypair = Daisy.Signature.new_keypair()
       iex> {:ok, storage_pid} = Daisy.Storage.start_link()
       iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
       iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
@@ -229,13 +228,23 @@ defmodule Daisy.Block do
       iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
       iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
       iex> {:ok, new_block} = Daisy.Block.new_block(block_hash, storage_pid, [trx_1, trx_2])
-      iex> {:ok, processed_block} = Daisy.Block.process_block(new_block, storage_pid, Daisy.Examples.Test.Runner)
-      iex> Daisy.Block.read(processed_block, storage_pid, "result", [], Daisy.Examples.Test.Reader)
+      iex> {:ok, processed_block, processed_block_hash} = Daisy.Block.process_and_save_block(new_block, storage_pid, Daisy.Examples.Test.Runner)
+      iex> Daisy.Block.read(storage_pid, processed_block, "result", [], Daisy.Examples.Test.Reader)
+      {:ok, 7}
+      iex> Daisy.Block.read(storage_pid, processed_block_hash, "result", [], Daisy.Examples.Test.Reader)
       {:ok, 7}
   """
-  @spec read(Daisy.Data.Block.t, identifier(), String.t, [String.t], Daisy.Reader.reader) :: String.t
-  def read(block, storage_pid, function, args, reader) do
-    Daisy.Reader.read(block, storage_pid, function, args, reader)
+  @spec read(identifier(), Daisy.Data.Block.t | Daisy.Storage.root_hash, String.t, [String.t], Daisy.Reader.reader) :: {:ok, any()} | {:error, any()}
+  def read(storage_pid, %Daisy.Data.Block{final_storage: final_storage}, function, args, reader), do: do_read(storage_pid, final_storage, function, args, reader)
+  def read(storage_pid, block_hash, function, args, reader) do
+    with {:ok, final_storage} <- final_storage(block_hash, storage_pid) do
+      do_read(storage_pid, final_storage, function, args, reader)
+    end
+  end
+
+  @spec do_read(identifier(), Daisy.Storage.root_hash, String.t, [String.t], Daisy.Reader.reader) :: String.t
+  defp do_read(storage_pid, block_hash, function, args, reader) do
+    Daisy.Reader.read(storage_pid, block_hash, function, args, reader)
   end
 
 end
