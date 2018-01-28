@@ -17,7 +17,35 @@ def deps do
 end
 ```
 
+## Terminology
+
+<dl>
+  <dt>Block</dt>
+  <dd>A block is a collection of transactions which are run from the final state of a parent block. Each transaction generates a receipt describing how it ran.</dd>
+
+  <dt>Transaction, Invokation and Signature</dt>
+  <dd>A function invokation signed by a user. Transactions effect the total state of the chain. The `Invokation` specifies what function and arguments to call in the VM Runner, and the signature provides an ECDSA signature to prove who is the owner of the message.</dd>
+
+  <dt>Receipt</dt>
+  <dd>After a transaction is run, a receipt is generated. The receipt described what happened during the execution of the transaction. A receipt includes logs, the final state after running, etc.</dd>
+
+  <dt>Daisy VM</dt>
+  <dd>A VM describes how your world works in Daisy. For a VM, you specify a `Runner` which is responsible for function invokations from `Transaction`s, and you specify a `Reader` which describes how to read from your world state.</dd>
+
+  <dt>Proof</dt>
+  <dd>To interact with other chains (e.g. Ethereum), it's often necessary to state
+  that a value exists in a Daisy side-chain without having to include the entire Daisy chain in the Ethereum blockchain. `Proof` are nodes in the IPFS tree that prove a given leaf has a given value rolled up a block hash.</dd>
+
+  <dt>Serializer</dt>
+  <dd>Some data, such as transactions and receipts, are serialized before being pushed onto the blockchain. This is because, among other reasons, they need a digital signature and thus a canonical representation. We currently support JSON serialization.</dd>
+</dl>
+
+## Documentation
+
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at [https://hexdocs.pm/daisy](https://hexdocs.pm/daisy).
 
+## Contributing
+
+Feel free to open a pull request or raise an issue. Daisy is in early development.
