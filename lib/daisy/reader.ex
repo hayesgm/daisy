@@ -6,11 +6,21 @@ defmodule Daisy.Reader do
 
   @type reader :: module()
 
-  @callback read(identifier(), String.t, String.t, [String.t]) :: {:ok, any()} | {:erorr, any()}
+  @callback read(String.t, [String.t], identifier(), Daisy.Storage.root_hash) :: {:ok, any()} | {:erorr, any()}
 
-  @spec read(Daisy.Block.t, identifier(), String.t, [String.t], reader) :: {:ok, any()} | {:error, any()}
-  def read(block, storage_pid, function, args, reader) do
-    reader.read(storage_pid, block.final_storage, function, args)
+  @doc """
+  Reads from a given reader, which is a module which will be invoked to read
+  data from the IPFS chain (without making any modifications).
+
+  ## Examples
+
+      iex> {:ok, storage_pid} = Daisy.Storage.start_link()
+      iex> Daisy.Reader.read(storage_pid, "", "simple", [6], Daisy.Examples.Test.Reader)
+      {:ok, 11}
+  """
+  @spec read(identifier(), Daisy.Storage.root_hash, String.t, [String.t], reader) :: {:ok, any()} | {:error, any()}
+  def read(storage_pid, final_storage, function, args, reader) do
+    reader.read(function, args, storage_pid, final_storage)
   end
 
 end

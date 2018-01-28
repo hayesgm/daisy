@@ -11,6 +11,12 @@ defmodule Daisy.Encoder do
     Base58Check.encode58(data)
   end
 
+  @spec maybe_encode_58(binary() | nil) :: String.t | nil
+  def maybe_encode_58(nil), do: nil
+  def maybe_encode_58(data) do
+    Base58Check.encode58(data)
+  end
+
   @spec decode_58!(String.t) :: binary()
   def decode_58!(enc) do
     Base58Check.decode58(enc) |> :binary.encode_unsigned()

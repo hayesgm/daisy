@@ -20,5 +20,6 @@ end
 defmodule Daisy.Data.Receipt.Status do
   use Protobufex, enum: true, syntax: :proto3
 
-  field :OK, 0
+  field :ok, 0
+  field :failure, 1
 end

@@ -308,7 +308,7 @@ defmodule Daisy.Storage do
 
   @spec get(identifier(), root_hash, String.t) :: {:ok, String.t} | :not_found | {:error, any()}
   def get(server, root_hash, path) do
-    GenServer.call(server, {:get, root_hash, path})
+    GenServer.call(server, {:get, root_hash, clean(path)})
   end
 
   @spec get_all(identifier(), root_hash) :: {:ok, %{}} | {:error, any()}
@@ -318,12 +318,12 @@ defmodule Daisy.Storage do
 
   @spec proof(identifier(), root_hash, String.t) :: :ok | :not_found | {:error, any()}
   def proof(server, root_hash, path) do
-    GenServer.call(server, {:proof, root_hash, path})
+    GenServer.call(server, {:proof, root_hash, clean(path)})
   end
 
   @spec put(identifier(), root_hash, String.t, binary()) :: {:ok, root_hash} | {:error, any()}
   def put(server, root_hash, path, value) do
-    GenServer.call(server, {:put, root_hash, path, value})
+    GenServer.call(server, {:put, root_hash, clean(path), value})
   end
 
   @spec put_all(identifier(), root_hash, [{String.t, binary()}]) :: {:ok, root_hash} | {:error, any()}
@@ -333,7 +333,7 @@ defmodule Daisy.Storage do
 
   @spec put(identifier(), root_hash, String.t, binary()) :: {:ok, root_hash} | :file_exists | {:error, any()}
   def put_new(server, root_hash, path, value) do
-    GenServer.call(server, {:put_new, root_hash, path, value})
+    GenServer.call(server, {:put_new, root_hash, clean(path), value})
   end
 
   @spec update(identifier(), root_hash, String.t, (String.t -> String.t), [default: String.t, run_update_fn_on_default: boolean()]) :: {:ok, root_hash} | {:error, any()}
@@ -341,7 +341,7 @@ defmodule Daisy.Storage do
     default = Keyword.get(opts, :default, "")
     run_update_fn_on_default = Keyword.get(opts, :run_update_fn_on_default, false)
 
-    GenServer.call(server, {:update, root_hash, path, update_fn, default, run_update_fn_on_default})
+    GenServer.call(server, {:update, root_hash, clean(path), update_fn, default, run_update_fn_on_default})
   end
 
   # TODO: Test
@@ -355,4 +355,8 @@ defmodule Daisy.Storage do
   def retrieve(server, data_hash) do
     GenServer.call(server, {:retrieve, data_hash})
   end
+
+  @spec clean(String.t) :: String.t
+  defp clean("/" <> path), do: path
+  defp clean(path), do: path
 end
