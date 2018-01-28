@@ -24,9 +24,7 @@ defmodule Daisy.Storage do
   end
 
   def handle_call(:new, _from, %{client: client}=state) do
-    result = with {:ok, %IPFS.Client.PatchObject{hash: root_hash}} <- IPFS.Client.object_new(client) do
-      {:ok, root_hash}
-    end
+    result = ipfs_new(client)
 
     {:reply, result, state}
   end
@@ -35,6 +33,12 @@ defmodule Daisy.Storage do
     put_result = ipfs_put(client, root_hash, path, data)
 
     {:reply, put_result, state}
+  end
+
+  def handle_call({:put_all, root_hash, values}, _from, %{client: client}=state) do
+    put_all_result = ipfs_put_all(client, root_hash, values)
+
+    {:reply, put_all_result, state}
   end
 
   def handle_call({:put_new, root_hash, path, data}, _from, %{client: client}=state) do
@@ -130,14 +134,26 @@ defmodule Daisy.Storage do
     {:reply, result, state}
   end
 
+  @spec ipfs_new(IPFS.Client.t) :: {:ok, root_hash} | {:error, any()}
+  defp ipfs_new(client) do
+    with {:ok, %IPFS.Client.PatchObject{hash: root_hash}} <- IPFS.Client.object_new(client) do
+      {:ok, root_hash}
+    end
+  end
+
   @spec ipfs_put(IPFS.Client.t, root_hash, String.t, String.t) :: {:ok, root_hash} | {:error, any()}
   defp ipfs_put(client, root_hash, path, data) do
     # First, add the object
     with {:ok, data_hash} <- ipfs_save(client, data) do
       # Then, add to hash
-      with {:ok, %IPFS.Client.PatchObject{hash: new_root_hash}} <- IPFS.Client.object_patch_add_link(client, root_hash, path, data_hash, true) do
-        {:ok, new_root_hash}
-      end
+      ipfs_add_link(client, root_hash, path, data_hash)
+    end
+  end
+
+  @spec ipfs_add_link(IPFS.Client.t, root_hash, String.t, String.t) :: {:ok, root_hash} | {:error, any()}
+  defp ipfs_add_link(client, root_hash, path, data_hash) do
+    with {:ok, %IPFS.Client.PatchObject{hash: new_root_hash}} <- IPFS.Client.object_patch_add_link(client, root_hash, path, data_hash, true) do
+      {:ok, new_root_hash}
     end
   end
 
@@ -146,6 +162,30 @@ defmodule Daisy.Storage do
     with {:ok, %IPFS.Client.PatchObject{hash: data_hash}} <- IPFS.Client.object_put(client, data, false) do
       {:ok, data_hash}
     end
+  end
+
+  @spec ipfs_put_all(IPFS.Client.t, root_hash, %{}) :: {:ok, binary()} | {:error, any()}
+  def ipfs_put_all(client, root_hash, values) do
+    Enum.reduce(values, {:ok, root_hash}, fn
+      {path, data}, {:ok, current_hash} when is_binary(data) ->
+        # Put a simple value
+        ipfs_put(client, current_hash, path, data)
+      {path, values}, {:ok, current_hash} when is_map(values) ->
+        # Put a block of values
+        hash_result = case ipfs_get_hash(client, current_hash, path) do
+          {:ok, existing_root_hash} -> {:ok, existing_root_hash}
+          :not_found -> ipfs_new(client)
+          {:error, error} -> {:error, error}
+        end
+
+        with {:ok, hash_result_hash} <- hash_result do
+          with {:ok, values_root_hash} <- ipfs_put_all(client, hash_result_hash, values) do
+            # Link the new block to the current hash
+            ipfs_add_link(client, current_hash, path, values_root_hash)
+          end
+        end
+      _, {:error, error} -> {:error, error}
+    end)
   end
 
   @spec ipfs_retrieve(IPFS.Client.t, data_hash) :: {:ok, binary()} | {:error, any()}
@@ -164,12 +204,19 @@ defmodule Daisy.Storage do
 
   @spec ipfs_get(IPFS.Client.t, root_hash, String.t) :: {:ok, String.t} | :not_found | {:error, any()}
   defp ipfs_get(client, root_hash, path) do
+    with {:ok, data_hash} <- ipfs_get_hash(client, root_hash, path) do
+      with {:ok, data} <- ipfs_retrieve(client, data_hash) do
+        {:ok, data}
+      end
+    end
+  end
+
+  @spec ipfs_get_hash(IPFS.Client.t, root_hash, String.t) :: {:ok, String.t} | :not_found | {:error, any()}
+  defp ipfs_get_hash(client, root_hash, path) do
     # Note: This might be slow since we need to walk entire path to find file
     case walk_path(client, path, root_hash) do
       {:ok, [], _found_path, _found_objects, _found_links, data_hash} ->
-        with {:ok, data} <- ipfs_retrieve(client, data_hash) do
-          {:ok, data}
-        end
+        {:ok, data_hash}
       {:ok, _looking_path, _found_path, _found_objects, _found_links, _data_hash} -> :not_found
       els -> els
     end
@@ -222,6 +269,11 @@ defmodule Daisy.Storage do
   @spec put(identifier(), root_hash, String.t, binary()) :: {:ok, root_hash} | {:error, any()}
   def put(server, root_hash, path, value) do
     GenServer.call(server, {:put, root_hash, path, value})
+  end
+
+  @spec put_all(identifier(), root_hash, [{String.t, binary()}]) :: {:ok, root_hash} | {:error, any()}
+  def put_all(server, root_hash, values) do
+    GenServer.call(server, {:put_all, root_hash, values})
   end
 
   @spec put(identifier(), root_hash, String.t, binary()) :: {:ok, root_hash} | :file_exists | {:error, any()}
