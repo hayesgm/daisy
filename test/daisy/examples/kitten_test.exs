@@ -1,5 +1,6 @@
-defmodule Daisy.KittenTest do
+defmodule Daisy.Examples.KittenTest do
   use ExUnit.Case, async: true
+  alias Daisy.Examples.Kitten
 
   setup do
     {:ok, storage_pid} = Daisy.Storage.start_link()

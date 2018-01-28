@@ -3,8 +3,7 @@ defmodule Daisy do
   Documentation for Daisy.
   """
 
-  def blockchain do
-    :ok
-  end
+  def get_runner(), do: Application.get_env(:daisy, :runner)
+  def get_reader(), do: Application.get_env(:daisy, :reader)
 
 end
