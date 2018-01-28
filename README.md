@@ -17,6 +17,22 @@ def deps do
 end
 ```
 
+## API
+
+Daisy comes with a JSON-API to communicate with a node.
+
+### Reading
+
+```bash
+# Read from current block
+curl http://localhost:2235/read/:my_func>/:my_arg_1/:my_arg_2/...
+{"result" => "good"}
+
+# Read from specified block
+curl http://localhost:2235/read/block/:block_hash/:my_func/:my_arg_1/:my_arg_2/...
+{"result" => "good"}
+```
+
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
 and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
 be found at [https://hexdocs.pm/daisy](https://hexdocs.pm/daisy).
