@@ -11,8 +11,18 @@ defmodule Daisy.Storage do
   @type root_hash :: String.t
   @type data_hash :: String.t
 
-  def start_link(host \\ "localhost", port \\ "5001") do
-    GenServer.start_link(__MODULE__, {host, port})
+  def start_link(opts \\ []) do
+    host = Keyword.get(opts, :host, "localhost")
+    port = Keyword.get(opts, :port, "5001")
+    name = Keyword.get(opts, :name, nil)
+
+    gen_server_args = if name do
+      [name: name]
+    else
+      []
+    end
+
+    GenServer.start_link(__MODULE__, {host, port}, gen_server_args)
   end
 
   def init({host, port}) do

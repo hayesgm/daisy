@@ -229,9 +229,9 @@ defmodule Daisy.Block do
       iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
       iex> {:ok, new_block} = Daisy.Block.new_block(block_hash, storage_pid, [trx_1, trx_2])
       iex> {:ok, processed_block, processed_block_hash} = Daisy.Block.process_and_save_block(new_block, storage_pid, Daisy.Examples.Test.Runner)
-      iex> Daisy.Block.read(storage_pid, processed_block, "result", [], Daisy.Examples.Test.Reader)
+      iex> Daisy.Block.read(storage_pid, processed_block, "result", %{}, Daisy.Examples.Test.Reader)
       {:ok, 7}
-      iex> Daisy.Block.read(storage_pid, processed_block_hash, "result", [], Daisy.Examples.Test.Reader)
+      iex> Daisy.Block.read(storage_pid, processed_block_hash, "result", %{}, Daisy.Examples.Test.Reader)
       {:ok, 7}
   """
   @spec read(identifier(), Daisy.Data.Block.t | Daisy.Storage.root_hash, String.t, [String.t], Daisy.Reader.reader) :: {:ok, any()} | {:error, any()}

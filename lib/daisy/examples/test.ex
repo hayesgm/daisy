@@ -6,8 +6,8 @@ defmodule Daisy.Examples.Test do
   defmodule Reader do
     @behaviour Daisy.Reader
 
-    @spec read(String.t, [String.t], identifier(), Daisy.Storage.root_hash) :: {:ok, any()} | {:erorr, any()}
-    def read("result", [], storage_pid, storage) do
+    @spec read(String.t, %{String.t => String.t}, identifier(), Daisy.Storage.root_hash) :: {:ok, any()} | {:erorr, any()}
+    def read("result", %{}, storage_pid, storage) do
       case Daisy.Storage.get(storage_pid, storage, "result") do
         {:ok, "result=" <> result} -> {:ok, result |> String.to_integer}
         :not_found -> {:error, :not_found}
@@ -15,8 +15,8 @@ defmodule Daisy.Examples.Test do
       end
     end
 
-    def read("simple", [number], _storage_pid, _storage) do
-      {:ok, number + 5}
+    def read("simple", %{"input" => number}, _storage_pid, _storage) do
+      {:ok, String.to_integer(number) + 5}
     end
   end
 

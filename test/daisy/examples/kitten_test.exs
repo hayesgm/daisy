@@ -86,7 +86,7 @@ defmodule Daisy.KittenTest do
       Daisy.Block.process_and_save_block(block_1, storage_pid, Kitten.Runner)
 
     # Let's read the kitten from adopted kitties
-    assert {:ok, [kitten_uuid]} = Daisy.Block.read(storage_pid, block_1, "orphans", [], Kitten.Reader)
+    assert {:ok, [kitten_uuid]} = Daisy.Block.read(storage_pid, block_1, "orphans", %{}, Kitten.Reader)
 
     invokation_2 = Daisy.Data.Invokation.new(function: "adopt", args: [kitten_uuid])
     invokation_3 = Daisy.Data.Invokation.new(function: "adopt", args: [kitten_uuid])
