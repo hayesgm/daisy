@@ -75,7 +75,7 @@ defmodule Daisy.MinterTest do
       Minter.add_transaction(minter_pid, transaction)
       Minter.mine_block(minter_pid)
 
-      assert {:ok, 51} == Minter.read(minter_pid, "result", %{})
+      assert {:ok, 51} == Minter.read(minter_pid, "result", [])
     end
   end
 
