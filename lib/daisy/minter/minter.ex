@@ -13,6 +13,7 @@ defmodule Daisy.Minter do
   }
 
   @interval 5_000
+  @mine_timeout 60_000
 
   def start_link(storage_pid, block_hash, runner, reader, opts \\ []) do
     name = Keyword.get(opts, :name, nil)
@@ -29,6 +30,12 @@ defmodule Daisy.Minter do
   @spec init({identifier(), Daisy.Block.block_hash | :genesis, module(), module(), keyword()}) :: {:ok, state}
   def init({storage_pid, block_hash, runner, reader, opts}) do
     block_result = case block_hash do
+      :resolve ->
+        case Daisy.Persistence.resolve(Daisy.Persistence) do
+          {:ok, nil} -> Daisy.Block.genesis_block(storage_pid)
+          {:ok, block_hash} -> {:ok, block_hash}
+          {:error, error} -> raise "[Minter] Error resolving block hash: #{inspect error}"
+        end
       :genesis ->
         Daisy.Block.genesis_block(storage_pid)
       block_hash ->
@@ -39,6 +46,9 @@ defmodule Daisy.Minter do
       {:ok, block} -> block
       {:error, error} -> raise "Failed to load genesis block #{inspect block_hash}: #{inspect error}"
     end
+
+    Logger.info("[Miner] Starting with block hash: #{}")
+    Logger.debug("[Miner] Starting block: #{inspect block}")
 
     if Keyword.get(opts, :mine, false) do
       mining_interval = Keyword.get(opts, :mining_interval, @interval)
@@ -119,11 +129,14 @@ defmodule Daisy.Minter do
 
   @spec server_mine_block(Daisy.Data.Block.t, identifier(), module()) :: {:ok, Daisy.Block.block_hash, Daisy.Data.Block.t} | {:error, any()}
   defp server_mine_block(block, storage_pid, runner) do
+    # First, finalize the block
     result = with {:ok, _finalized_block, final_block_hash} <- Daisy.Block.process_and_save_block(block, storage_pid, runner) do
-      # TODO: Store block remotely
-
-      with {:ok, new_block} <- Daisy.Block.new_block(final_block_hash, storage_pid, []) do
-        {:ok, final_block_hash, new_block}
+      # Next, store the block to our mutable long-term persistence
+      with {:ok, _name, _value} <- Daisy.Persistence.publish(Daisy.Persistence, final_block_hash) do
+        # Finally, start a new block
+        with {:ok, new_block} <- Daisy.Block.new_block(final_block_hash, storage_pid, []) do
+          {:ok, final_block_hash, new_block}
+        end
       end
     end
   end
@@ -137,7 +150,7 @@ defmodule Daisy.Minter do
 
   @spec mine_block(identifier()) :: {:ok, Daisy.Block.block_hash} | {:error, any()}
   def mine_block(server) do
-    GenServer.call(server, :mine_block)
+    GenServer.call(server, :mine_block, @mine_timeout)
   end
 
   @spec add_transaction(identifier(), Daisy.Data.Transaction.t) :: Daisy.Data.Block.t
