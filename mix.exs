@@ -20,6 +20,7 @@ defmodule Daisy.Mixfile do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
+      mod: {Daisy.Application, []},
       extra_applications: [:logger]
     ]
   end
@@ -32,6 +33,8 @@ defmodule Daisy.Mixfile do
       {:protobufex, github: "hayesgm/protobuf-elixir", branch: "hayesgm/extensions-ex"},
       {:uuid, "~> 1.1"},
       {:base58check, github: "lukaszsamson/base58check"},
+      {:cowboy, "~> 1.0.0"},
+      {:plug, "~> 1.0"}
     ]
   end
 end

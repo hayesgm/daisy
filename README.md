@@ -40,6 +40,22 @@ end
   <dd>Some data, such as transactions and receipts, are serialized before being pushed onto the blockchain. This is because, among other reasons, they need a digital signature and thus a canonical representation. We currently support JSON serialization.</dd>
 </dl>
 
+## API
+
+Daisy comes with a JSON-API to communicate with a node.
+
+### Reading from Daisy Blocks
+
+```bash
+# Read from current block
+curl http://localhost:2235/read/:my_func>/:my_arg_1/:my_arg_2/...
+{"result" => "good"}
+
+# Read from specified block
+curl http://localhost:2235/read/block/:block_hash/:my_func/:my_arg_1/:my_arg_2/...
+{"result" => "good"}
+```
+
 ## Documentation
 
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)

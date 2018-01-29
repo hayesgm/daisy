@@ -1,5 +1,6 @@
-defmodule Daisy.KittenTest do
+defmodule Daisy.Examples.KittenTest do
   use ExUnit.Case, async: true
+  alias Daisy.Examples.Kitten
 
   setup do
     {:ok, storage_pid} = Daisy.Storage.start_link()
@@ -86,7 +87,7 @@ defmodule Daisy.KittenTest do
       Daisy.Block.process_and_save_block(block_1, storage_pid, Kitten.Runner)
 
     # Let's read the kitten from adopted kitties
-    assert {:ok, [kitten_uuid]} = Daisy.Block.read(storage_pid, block_1, "orphans", [], Kitten.Reader)
+    assert {:ok, [kitten_uuid]} = Daisy.Block.read(storage_pid, block_1, "orphans", %{}, Kitten.Reader)
 
     invokation_2 = Daisy.Data.Invokation.new(function: "adopt", args: [kitten_uuid])
     invokation_3 = Daisy.Data.Invokation.new(function: "adopt", args: [kitten_uuid])

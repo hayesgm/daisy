@@ -1,11 +1,10 @@
-defmodule Kitten do
+defmodule Daisy.Examples.Kitten do
   @moduledoc """
   Kitten is an example Daisy library. This emulates a simple crypto-kitty
   like world.
   """
 
   defmodule Data do
-
     defmodule Kitten do
       defstruct [:uuid, :name, :owner]
 
@@ -85,7 +84,7 @@ defmodule Kitten do
     end
 
     def read("kitten", [kitten_uuid], storage_pid, storage) do
-      with {:ok, kitten_json} <- Daisy.Storage.get(storage_pid, storage, "/kitten/#{kitten_uuid}") do
+      with {:ok, kitten_json} <- Daisy.Storage.get(storage_pid, storage, "/kittens/#{kitten_uuid}") do
         {:ok, Data.Kitten.deserialize(kitten_json)}
       end
     end

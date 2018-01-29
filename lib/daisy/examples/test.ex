@@ -16,7 +16,7 @@ defmodule Daisy.Examples.Test do
     end
 
     def read("simple", [number], _storage_pid, _storage) do
-      {:ok, number + 5}
+      {:ok, String.to_integer(number) + 5}
     end
   end
 
