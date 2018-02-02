@@ -52,7 +52,7 @@ Daisy aims to be a side-chain. We have a few important design mantras to guide o
 
 ## Daisy VM
 
-To implement a bespoke Daisy VM, you need to build two modules, a `Reader` and a `Runner`. Here's a simplified VM for tic-tac-toe, illustrating a `read` and `run_transaction` implementation. For more information, see the [https://hexdocs.pm/daisy](https://hexdocs.pm/daisy).
+To implement a bespoke Daisy VM, you need to build two modules, a `Reader` and a `Runner`. Here's a simplified VM for tic-tac-toe, illustrating a `read` and `run_transaction` implementation. For more information, see the [hex docs](https://hexdocs.pm/daisy).
 
 ```elixir
 defmodule TieTacToe do
