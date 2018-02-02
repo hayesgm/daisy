@@ -50,6 +50,58 @@ Daisy aims to be a side-chain. We have a few important design mantras to guide o
   <dd>Some data, such as transactions and receipts, are serialized before being pushed onto the blockchain. This is because, among other reasons, they need a digital signature and thus a canonical representation. We currently support JSON serialization.</dd>
 </dl>
 
+## Daisy VM
+
+To implement a bespoke Daisy VM, you need to build two modules, a `Reader` and a `Runner`. Here's a simplified VM for tic-tac-toe, illustrating a `read` and `run_transaction` implementation. For more information, see the [https://hexdocs.pm/daisy](https://hexdocs.pm/daisy).
+
+```elixir
+defmodule TieTacToe do
+  @behaviour Daisy.Reader
+  @behaviour Daisy.Runner
+
+  # Reads a gameboard based on game_uuid
+  @spec read(String.t, [String.t], Daisy.Storage.root_hash) :: {:ok, any()} | {:erorr, any()}
+  def read("board", [game_uuid], storage) do
+    # Read game from storage
+    with {:ok, game} <- Daisy.Storage.get(storage, "game:#{game_uuid}") |> deserialize do
+      # Pass back result to caller
+      {:ok, game |> pretty_print}
+    end
+  end
+
+  # Allows a player to move in tic-tac-toe
+  def run_transaction(%Daisy.Data.Invokation{function: "play", args: [game_uuid, position]}, storage_0, player) do
+    # Get the current game state
+    with {:ok, game} <- Daisy.Storage.get(storage_0, "game:#{game_uuid}") |> deserialize do
+      # Check it's the player's turn
+      unless game.turn == player do
+        {:ok, %{
+          status: :failure,
+          logs: ["Not your turn #{player}!"]
+        }}
+      else
+        # Make the move for the player
+        updated_game = game
+          |> Map.put(game, :moves, [position |> String.to_integer, game.moves])
+          |> Map.put(game, :turn, game |> next_turn)
+
+        # Update the new game state
+        with {:ok, storage_1} <- Daisy.Storage.put(storage_0, "game:#{game_uuid}", updated_game |> serialize) do
+          # Return success and logs
+          {:ok, %{
+            status: :success,
+            final_storage: storage_1,
+            logs: [
+              "Player #{player} placed piece at #{position}"
+            ]
+          }}
+        end
+      end
+    end
+  end
+end
+```
+
 ## API
 
 Daisy comes with a JSON-API to communicate with a node.
