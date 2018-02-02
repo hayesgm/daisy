@@ -17,6 +17,16 @@ def deps do
 end
 ```
 
+## Design Mantras
+
+Daisy aims to be a side-chain. We have a few important design mantras to guide our process:
+
+1. **Bring your own Bespoke VM**. Anyone who builds a Daisy chain can incorporate whatever VM fits that business application. For example, you could build a ZombieKittens VM that exposes `sire_kitten(kitten_uuid)`, `fight_kitten(kitten_uuid, target_uuid)`, both of which are implemented in Elixir. Anyone who submits a transaction to the chain is submitting intent, not arbitrary code. Which brings us to:
+2. **Forks are Patches**. Transactions are intent-based given a Daisy VM. For example, a Payment VM might have a transaction: `transfer_funds(from, to)` or a Chess VM: `move_pawn(game, location)`. When there are bugs in the implementation of a function, it should be easily agreed upon to make a change if it matches the original intent for the user. Patches must be agreed upon by the community, and the goal is that most patches should be quickly accepted.
+3. **Ethereum Bridge Contracts**. Daisy is just a side-chain; it's meant to interact with one or more main chains. The root hash of every mined block is submitted to an Ethereum Bridge Contract. This contract can, via evidence provided by merkle-proofs, verify that data exists on the side-chain. For instance, this allows your chain to verifiable move Ether into your Daisy side-chain. The end-user could add Ether to the bridge contract, which would be held as pending until a merkle-proof from a new root hash included the user's updated side-chain balance. These bridges allow Daisy side-chains to interact with Ethereum, Bitcoin and all other chains.
+4. **Elected-Leader Sidechain**. We belive that adding a little centralization can go a long way. In Daisy, token holders on a main chain (e.g. the Ethereum Bridge Contract) elect a leader who mines all blocks. To submit a transction, you pass the transaction to the leader directly (and get an immediate pending result). Anyone can run a Daisy node and verify that the given blocks are accurate to the protocol. If the leader posts any inaccurate blocks, the community immediately holds a new leader election in the bridge contract. The central leader allows the entire system to be free, instant and verifiable.
+5. **IPFS**. All blockchains need to store data in a content-addressable structure and distribute those blocks in a peer-to-peer system. Can't somebody else do it? Well, they did, and it's IPFS. Daisy relies on IPFS for distributing new blocks, IPNS for information about the current block hash and even allows users to explore the blockchain through the web at https://ipfs.io.
+
 ## Terminology
 
 <dl>
