@@ -22,7 +22,7 @@ defmodule Daisy.API.Router do
 
     _result_transaction = Daisy.Minter.add_transaction(Daisy.Minter, transaction)
 
-    send_resp(conn, 200, %{"result" => "ok"} |> Poison.encode!)
+    send_resp(conn, 200, %{"result" => "ok"} |> Poison.encode! |> Kernel.<>("\n"))
   end
 
   get "/read/block/:block_hash/:function/*args" do
@@ -35,4 +35,5 @@ defmodule Daisy.API.Router do
   match _ do
     send_resp(conn, 404, "not found")
   end
+
 end

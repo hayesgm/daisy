@@ -72,8 +72,10 @@ defmodule Daisy.Examples.Kitten do
 
     @spec read(String.t, [String.t], identifier(), Daisy.Storage.root_hash) :: {:ok, any()} | {:erorr, any()}
     def read("orphans", [], storage_pid, storage) do
-      with {:ok, orphan_json} <- Daisy.Storage.get(storage_pid, storage, "orphans") do
-        {:ok, Data.Orphan.deserialize(orphan_json)}
+      case Daisy.Storage.get(storage_pid, storage, "orphans") do
+        {:ok, orphan_json} -> {:ok, Data.Orphan.deserialize(orphan_json)}
+        :not_found -> {:ok, []}
+        error={:error, _error} -> error
       end
     end
 
