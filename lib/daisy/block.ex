@@ -182,10 +182,7 @@ defmodule Daisy.Block do
   @spec load_block(identifier(), block_hash) :: {:ok, Daisy.Data.Block.t} | {:error, any()}
   def load_block(storage_pid, block_hash) do
     with {:ok, values} <- Daisy.Storage.get_all(storage_pid, block_hash) do
-      block_values = values["block"]
-      block = @serializer.deserialize(block_values)
-
-      {:ok, block}
+      {:ok, @serializer.deserialize(values)}
     end
   end
 

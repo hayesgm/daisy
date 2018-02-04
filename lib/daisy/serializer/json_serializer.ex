@@ -20,6 +20,7 @@ defmodule Daisy.Serializer.JSONSerializer do
   ```
 
   This serializer always encodes the final result as JSON.
+  TODO: Uhh, is this JSON anymore?
   """
   import Daisy.Encoder
 

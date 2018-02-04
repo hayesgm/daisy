@@ -12,9 +12,6 @@ defmodule Daisy.Minter do
     reader: module()
   }
 
-  @interval 5_000
-  @mine_timeout 60_000
-
   def start_link(storage_pid, block_hash, runner, reader, opts \\ []) do
     name = Keyword.get(opts, :name, nil)
 
@@ -28,35 +25,39 @@ defmodule Daisy.Minter do
   end
 
   @spec init({identifier(), Daisy.Block.block_hash | :genesis, module(), module(), keyword()}) :: {:ok, state}
-  def init({storage_pid, block_hash, runner, reader, opts}) do
+  def init({storage_pid, block_hash, runner, reader, _opts}) do
     block_result = case block_hash do
       :resolve ->
+        Logger.debug("[#{__MODULE__}] Looking up for stored block hash in IPNS...")
+
         case Daisy.Persistence.resolve(Daisy.Persistence) do
-          {:ok, nil} -> Daisy.Block.genesis_block(storage_pid)
-          {:ok, block_hash} -> {:ok, block_hash}
-          {:error, error} -> raise "[Minter] Error resolving block hash: #{inspect error}"
+          :not_found ->
+            Logger.debug("[#{__MODULE__}] No block found, starting new genesis block")
+
+            Daisy.Block.genesis_block(storage_pid)
+          {:ok, block_hash} ->
+            Logger.debug("[#{__MODULE__}] Loading block #{block_hash}")
+
+            Daisy.Block.load_block(storage_pid, block_hash)
+          {:error, error} -> raise "[#{__MODULE__}] Error resolving block hash: #{inspect error}"
         end
       :genesis ->
+        Logger.debug("[#{__MODULE__}] Loading genesis block, as requested.")
+
         Daisy.Block.genesis_block(storage_pid)
       block_hash ->
+        Logger.debug("[#{__MODULE__}] Loading block #{block_hash}, as requested.")
+
         Daisy.Block.load_block(storage_pid, block_hash)
     end
 
     block = case block_result do
       {:ok, block} -> block
-      {:error, error} -> raise "Failed to load genesis block #{inspect block_hash}: #{inspect error}"
+      {:error, error} -> raise "Failed to load starting block #{inspect block_hash}: #{inspect error}"
     end
 
-    Logger.info("[Miner] Starting with block hash: #{}")
-    Logger.debug("[Miner] Starting block: #{inspect block}")
-
-    if Keyword.get(opts, :mine, false) do
-      mining_interval = Keyword.get(opts, :mining_interval, @interval)
-
-      Logger.info("[Miner] Mining every #{@interval/1000.0} seconds.")
-
-      queue_mining(mining_interval)
-    end
+    # Logger.info("[#{__MODULE__}] Starting with block hash: #{}")
+    Logger.debug("[#{__MODULE__}] Starting block: #{inspect block}")
 
     {:ok, %{
       storage_pid: storage_pid,
@@ -85,58 +86,23 @@ defmodule Daisy.Minter do
     {:reply, result, state}
   end
 
-  def handle_cast({:start_mining, interval}, state) do
-    queue_mining(interval)
-
-    {:noreply, state}
-  end
-
-  def handle_info({:auto_mine_block, interval}, %{block: block, storage_pid: storage_pid, runner: runner}=state) do
-    # First, mine the block
-    result = case server_mine_block(block, storage_pid, runner) do
-      {:ok, final_block_hash, new_block} ->
-        Logger.info(fn -> "[Miner] Minted new block with hash `#{final_block_hash}`" end)
-        Logger.debug(fn -> "[Miner] New block: #{inspect new_block}" end)
-
-        {:noreply, Map.put(state, :block, new_block)}
-      {:error, error} ->
-        Logger.error("[Miner] Error mining block: #{inspect error}")
-
-        {:noreply, state}
-    end
-
-    # Then queue back up mining
-    queue_mining(interval)
-
-    # And return the result
-    result
-  end
-
-  def handle_call(:mine_block, _from, %{block: block, storage_pid: storage_pid, runner: runner}=state) do
+  def handle_call(:mint_current_block, _from, %{block: block, storage_pid: storage_pid, runner: runner}=state) do
     case server_mine_block(block, storage_pid, runner) do
       {:ok, final_block_hash, new_block} ->
-        {:reply, final_block_hash, Map.put(state, :block, new_block)}
+        {:reply, {:ok, final_block_hash}, Map.put(state, :block, new_block)}
       {:error, _error}=error_result ->
         # Don't change state if error
         {:reply, error_result, state}
     end
   end
 
-  # TODO: Track this ref so we can later stop mining
-  defp queue_mining(interval) do
-    Process.send_after(self(), {:auto_mine_block, interval}, interval)
-  end
-
   @spec server_mine_block(Daisy.Data.Block.t, identifier(), module()) :: {:ok, Daisy.Block.block_hash, Daisy.Data.Block.t} | {:error, any()}
   defp server_mine_block(block, storage_pid, runner) do
     # First, finalize the block
-    result = with {:ok, _finalized_block, final_block_hash} <- Daisy.Block.process_and_save_block(block, storage_pid, runner) do
-      # Next, store the block to our mutable long-term persistence
-      with {:ok, _name, _value} <- Daisy.Persistence.publish(Daisy.Persistence, final_block_hash) do
-        # Finally, start a new block
-        with {:ok, new_block} <- Daisy.Block.new_block(final_block_hash, storage_pid, []) do
-          {:ok, final_block_hash, new_block}
-        end
+    with {:ok, _finalized_block, final_block_hash} <- Daisy.Block.process_and_save_block(block, storage_pid, runner) do
+      # Finally, start a new block
+      with {:ok, new_block} <- Daisy.Block.new_block(final_block_hash, storage_pid, []) do
+        {:ok, final_block_hash, new_block}
       end
     end
   end
@@ -146,11 +112,6 @@ defmodule Daisy.Minter do
   @spec get_block(identifier()) :: {:ok, Daisy.Data.Block.t} | {:error, any()}
   def get_block(server) do
     GenServer.call(server, :get_block)
-  end
-
-  @spec mine_block(identifier()) :: {:ok, Daisy.Block.block_hash} | {:error, any()}
-  def mine_block(server) do
-    GenServer.call(server, :mine_block, @mine_timeout)
   end
 
   @spec add_transaction(identifier(), Daisy.Data.Transaction.t) :: Daisy.Data.Block.t
@@ -163,9 +124,8 @@ defmodule Daisy.Minter do
     GenServer.call(server, {:read, function, args})
   end
 
-  @spec start_mining(identifier(), integer()) :: :ok
-  def start_mining(server, interval \\ @interval) do
-    GenServer.cast(server, {:start_mining, interval})
+  def mint_current_block(server) do
+    GenServer.call(server, :mint_current_block)
   end
 
 end

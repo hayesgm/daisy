@@ -183,7 +183,7 @@ defmodule Daisy.Storage do
   @spec ipfs_put_all(IPFS.Client.t, root_hash, %{}) :: {:ok, binary()} | {:error, any()}
   def ipfs_put_all(client, root_hash, values) do
     Enum.reduce(values, {:ok, root_hash}, fn
-      {path, val}, {:ok, current_hash} when val == "" or val == %{} ->
+      {path, val}, {:ok, current_hash} when is_nil(val) or val == "" or val == %{} ->
         # Skip blank nodes / maps
         {:ok, current_hash}
       {path, data}, {:ok, current_hash} when is_binary(data) ->
@@ -264,6 +264,7 @@ defmodule Daisy.Storage do
 
   @spec ipfs_get(IPFS.Client.t, root_hash, String.t) :: {:ok, String.t} | :not_found | {:error, any()}
   defp ipfs_get(client, root_hash, path) do
+    IO.inspect(["Getting", client, root_hash, path])
     with {:ok, data_hash} <- ipfs_get_hash(client, root_hash, path) do
       with {:ok, data} <- ipfs_retrieve(client, data_hash) do
         {:ok, data}
