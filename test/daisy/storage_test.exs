@@ -189,8 +189,8 @@ defmodule Daisy.StorageTest do
     end
   end
 
-  describe "#get_all/2" do
-    test "it should return all values", %{server: server} do
+  describe "#get_all/3" do
+    test "it should return all values from root", %{server: server} do
       {:ok, root_hash} = Storage.new(server)
 
       map = %{
@@ -215,6 +215,33 @@ defmodule Daisy.StorageTest do
 
       assert Storage.get_all(server, root_hash) == {:ok, %{}}
       assert Storage.get_all(server, root_hash_1) == {:ok, map}
+    end
+
+    test "it should return all values from path", %{server: server} do
+      {:ok, root_hash} = Storage.new(server)
+
+      map = %{
+        "players" => sub_map=%{
+          "tim" => %{
+            "name" => "tim",
+            "scores" => %{
+              "0" => %{
+                "date" => "Jan 1",
+                "score" => "15"
+              },
+              "1" => %{
+                "date" => "Jan 2",
+                "score" => "20"
+              }
+            }
+          }
+        }
+      }
+
+      {:ok, root_hash_1} = Storage.put_all(server, root_hash, map)
+
+      assert Storage.get_all(server, root_hash_1, "players") == {:ok, sub_map}
+      assert Storage.get_all(server, root_hash_1, "teams") == :not_found
     end
   end
 
@@ -306,6 +333,45 @@ defmodule Daisy.StorageTest do
       assert {:invalid_proof, "coaches"} == Prover.verify_proof!(root_hash, fake_path_1, attrs, proof)
       assert {:invalid_proof, "baseball"} == Prover.verify_proof!(root_hash, fake_path_2, attrs, proof)
       assert {:invalid_proof, "red"} == Prover.verify_proof!(root_hash, fake_path_3, attrs, proof)
+    end
+  end
+
+  describe "#ls/3" do
+    test "it lists out files", %{server: server} do
+      {:ok, root_hash} = Storage.new(server)
+
+      {:ok, root_hash_1} = Storage.put_all(server, root_hash, %{
+        "coaches" => %{},
+        "meta" => "",
+        "players" => %{
+          "tim" => %{
+            "name" => "tim",
+            "scores" => %{
+              "0" => %{
+                "date" => "Jan 1",
+                "score" => "15"
+              },
+              "1" => %{
+                "date" => "Jan 2",
+                "score" => "20",
+                "extra" => %{}
+              }
+            }
+          }
+        }
+      })
+
+      assert {:ok, [{"players", _}]} = Storage.ls(server, root_hash_1, "/")
+      assert {:ok, []} == Storage.ls(server, root_hash_1, "/abc")
+      assert {:ok, []} == Storage.ls(server, root_hash_1, "/coaches")
+      assert {:ok, []} == Storage.ls(server, root_hash_1, "/meta")
+      assert {:ok, [{"tim", _}]} = Storage.ls(server, root_hash_1, "/players")
+      assert {:ok, []} == Storage.ls(server, root_hash_1, "/players/john")
+      assert {:ok, [{"name", _}, {"scores", _}]} = Storage.ls(server, root_hash_1, "/players/tim")
+      assert {:ok, []} == Storage.ls(server, root_hash_1, "/players/tim/name")
+      assert {:ok, [{"0", _}, {"1", _}]} = Storage.ls(server, root_hash_1, "/players/tim/scores")
+      assert {:ok, [{"date", _}, {"score", _}]} = Storage.ls(server, root_hash_1, "/players/tim/scores/0")
+      assert {:ok, []} == Storage.ls(server, root_hash_1, "/players/tim/scores/0/date")
     end
   end
 

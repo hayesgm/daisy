@@ -16,10 +16,12 @@ defmodule Daisy.Data.Transaction do
 
   @type t :: %__MODULE__{
     invokation: Daisy.Data.Invokation.t,
-    signature:  Daisy.Data.Signature.t
+    signature:  Daisy.Data.Signature.t,
+    owner:      String.t
   }
-  defstruct [:invokation, :signature]
+  defstruct [:invokation, :signature, :owner]
 
   field :invokation, 1, type: Daisy.Data.Invokation
   field :signature, 2, type: Daisy.Data.Signature
+  field :owner, 3, type: :bytes
 end

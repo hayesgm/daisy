@@ -36,9 +36,9 @@ defmodule Daisy.Minter do
 
             Daisy.Block.genesis_block(storage_pid)
           {:ok, block_hash} ->
-            Logger.debug("[#{__MODULE__}] Loading block #{block_hash}")
+            Logger.debug("[#{__MODULE__}] Creating new block from #{block_hash}")
 
-            Daisy.Block.load_block(storage_pid, block_hash)
+            Daisy.Block.new_block(block_hash, storage_pid, [])
           {:error, error} -> raise "[#{__MODULE__}] Error resolving block hash: #{inspect error}"
         end
       :genesis ->
@@ -99,7 +99,8 @@ defmodule Daisy.Minter do
   @spec server_mine_block(Daisy.Data.Block.t, identifier(), module()) :: {:ok, Daisy.Block.block_hash, Daisy.Data.Block.t} | {:error, any()}
   defp server_mine_block(block, storage_pid, runner) do
     # First, finalize the block
-    with {:ok, _finalized_block, final_block_hash} <- Daisy.Block.process_and_save_block(block, storage_pid, runner) do
+    with {:ok, finalized_block, final_block_hash} <- Daisy.Block.process_and_save_block(block, storage_pid, runner) do
+      Logger.debug("[#{__MODULE__}] Minted block #{inspect finalized_block}")
       # Finally, start a new block
       with {:ok, new_block} <- Daisy.Block.new_block(final_block_hash, storage_pid, []) do
         {:ok, final_block_hash, new_block}

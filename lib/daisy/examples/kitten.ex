@@ -98,8 +98,8 @@ defmodule Daisy.Examples.Kitten do
     @first_names ["mittens", "thomas", "frederick", "bubba"]
     @titles ["the cool", "the wise", "the timid", "the adorable"]
 
-    @callback run_transaction(Daisy.Data.Invokation.t, identifier(), Daisy.Storage.root_hash, binary()) :: {:ok, Daisy.Runner.transaction_result} | {:error, any()}
-    def run_transaction(%Daisy.Data.Invokation{function: "spawn", args: [_cooldown]}, storage_pid, initial_storage, owner) do
+    @callback run_transaction(Daisy.Data.Invokation.t, identifier(), Daisy.Storage.root_hash, integer(), binary()) :: {:ok, Daisy.Runner.transaction_result} | {:error, any()}
+    def run_transaction(%Daisy.Data.Invokation{function: "spawn", args: [cooldown]}, storage_pid, initial_storage, block_number, owner) do
       # Generate a new random identifier and name
       first_name = @first_names |> Enum.random
       title = @titles |> Enum.random
@@ -125,8 +125,20 @@ defmodule Daisy.Examples.Kitten do
         |> Data.Orphan.serialize
       end, default: "", run_update_fn_on_default: true)
 
+      # Recursive call spawn after a cooldown period
+      {:ok, storage_with_queued_transaction} = Daisy.TransactionQueue.queue(
+        storage_pid,
+        storage_with_kitten_as_orphan,
+        block_number + ( cooldown |> String.to_integer ),
+        owner,
+        Daisy.Data.Invokation.new(
+          function: "spawn",
+          args: [cooldown]
+        )
+      )
+
       {:ok, %{
-        final_storage: storage_with_kitten_as_orphan,
+        final_storage: storage_with_queued_transaction,
         logs: [
           "Added new kitten #{kitten.uuid} from owner #{inspect owner}"
         ],
@@ -134,7 +146,7 @@ defmodule Daisy.Examples.Kitten do
       }}
     end
 
-    def run_transaction(%Daisy.Data.Invokation{function: "adopt", args: [kitten_uuid]}, storage_pid, storage_1, owner) do
+    def run_transaction(%Daisy.Data.Invokation{function: "adopt", args: [kitten_uuid]}, storage_pid, storage_1, _block_number, owner) do
       # First, check to see that the kitten is up for adoption
       case Reader.read("is_orphan?", [kitten_uuid], storage_pid, storage_1) do
         {:ok, false} ->

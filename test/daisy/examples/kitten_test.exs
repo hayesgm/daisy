@@ -28,7 +28,7 @@ defmodule Daisy.Examples.KittenTest do
       Daisy.Block.process_and_save_block(new_block, storage_pid, Kitten.Runner)
 
     assert processed_block == %Daisy.Data.Block{
-      previous_block_hash: "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26",
+      parent_block_hash: "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26",
       initial_storage: genesis_block.initial_storage,
       final_storage: genesis_block.initial_storage,
       transactions: [],

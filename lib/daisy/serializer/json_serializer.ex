@@ -8,7 +8,9 @@ defmodule Daisy.Serializer.JSONSerializer do
 
   ```
   /ipfs/<block_hash>                    # root
-  /ipfs/<block_hash>/block              # block data
+  /ipfs/<block_hash>/block              # block data root
+  /ipfs/<block_hash>/block/number       # block number
+  /ipfs/<block_hash>/block/...
   /ipfs/<block_hash>/transactions       # transaction root
   /ipfs/<block_hash>/transactions/0     # first transaction
   /ipfs/<block_hash>/transactions/1     # second transaction
@@ -17,6 +19,7 @@ defmodule Daisy.Serializer.JSONSerializer do
   /ipfs/<block_hash>/receipts/0         # first receipt
   /ipfs/<block_hash>/receipts/1         # second receipt
   /ipfs/<block_hash>/receipts/...
+  /ipfs/<block_hash>/queued_transactions
   ```
 
   This serializer always encodes the final result as JSON.
@@ -32,7 +35,8 @@ defmodule Daisy.Serializer.JSONSerializer do
   ## Examples
 
       iex> %Daisy.Data.Block{
-      ...>   previous_block_hash: "2",
+      ...>   block_number: 5,
+      ...>   parent_block_hash: "2",
       ...>   initial_storage: "3",
       ...>   final_storage: "4",
       ...>   transactions: [%Daisy.Data.Transaction{
@@ -56,9 +60,10 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...> |> Daisy.Serializer.JSONSerializer.serialize()
       %{
         "block" => %{
+          "number" => "5",
           "final_storage" => "4",
           "initial_storage" => "3",
-          "previous_block_hash" => "2"
+          "parent_block_hash" => "2"
         },
         "receipts" => %{
           "0" => "{\"status\":\"0\",\"logs\":[\"log1\",\"log2\"],\"initial_storage\":\"1\",\"final_storage\":\"2\",\"debug\":\"debug message\"}"
@@ -94,9 +99,10 @@ defmodule Daisy.Serializer.JSONSerializer do
 
       iex> %{
       ...>   "block" => %{
+      ...>     "number" => "6",
       ...>     "final_storage" => "4",
       ...>     "initial_storage" => "3",
-      ...>     "previous_block_hash" => "2"
+      ...>     "parent_block_hash" => "2"
       ...>   },
       ...>   "receipts" => %{
       ...>     "0" => "{\"status\":\"0\",\"logs\":[\"log1\",\"log2\"],\"initial_storage\":\"1\",\"final_storage\":\"2\",\"debug\":\"debug message\"}"
@@ -107,7 +113,8 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...> }
       ...> |> Daisy.Serializer.JSONSerializer.deserialize()
       %Daisy.Data.Block{
-        previous_block_hash: "2",
+        block_number: 6,
+        parent_block_hash: "2",
         initial_storage: "3",
         final_storage: "4",
         transactions: [%Daisy.Data.Transaction{
@@ -118,7 +125,8 @@ defmodule Daisy.Serializer.JSONSerializer do
           invokation: %Daisy.Data.Invokation{
             function: "func",
             args: ["red", "tree"]
-          }
+          },
+          owner: nil
         }],
         receipts: [%Daisy.Data.Receipt{
           status: 0,
@@ -161,13 +169,15 @@ defmodule Daisy.Serializer.JSONSerializer do
   ## Examples
 
       iex> %Daisy.Data.Block{
-      ...>   previous_block_hash: "2",
+      ...>   block_number: 10,
+      ...>   parent_block_hash: "2",
       ...>   initial_storage: "3",
       ...>   final_storage: "4"
       ...> }
       ...> |> Daisy.Serializer.JSONSerializer.serialize_block_data()
       %{
-        "previous_block_hash" => "2",
+        "number" => "10",
+        "parent_block_hash" => "2",
         "initial_storage" => "3",
         "final_storage" => "4",
       }
@@ -175,7 +185,8 @@ defmodule Daisy.Serializer.JSONSerializer do
   @spec serialize_block_data(Daisy.Block.t) :: %{}
   def serialize_block_data(block) do
     %{
-      "previous_block_hash" => block.previous_block_hash,
+      "number" => block.block_number |> to_string,
+      "parent_block_hash" => block.parent_block_hash,
       "initial_storage" => block.initial_storage,
       "final_storage" => block.final_storage,
     }
@@ -189,25 +200,29 @@ defmodule Daisy.Serializer.JSONSerializer do
   ## Examples
 
       iex> %{
-      ...>   "previous_block_hash" => "2",
+      ...>   "number" => "55",
+      ...>   "parent_block_hash" => "2",
       ...>   "initial_storage" => "3",
       ...>   "final_storage" => "4",
       ...> }
       ...> |> Daisy.Serializer.JSONSerializer.deserialize_block_data()
       Daisy.Data.Block.new(
-        previous_block_hash: "2",
+        block_number: 55,
+        parent_block_hash: "2",
         initial_storage: "3",
         final_storage: "4"
       )
 
       iex> %{
-      ...>   "previous_block_hash" => nil,
+      ...>   "number" => "5",
+      ...>   "parent_block_hash" => nil,
       ...>   "initial_storage" => "3",
       ...>   "final_storage" => "4",
       ...> }
       ...> |> Daisy.Serializer.JSONSerializer.deserialize_block_data()
       Daisy.Data.Block.new(
-        previous_block_hash: "",
+        block_number: 5,
+        parent_block_hash: "",
         initial_storage: "3",
         final_storage: "4"
       )
@@ -215,7 +230,8 @@ defmodule Daisy.Serializer.JSONSerializer do
   @spec deserialize_block_data(%{}) :: Daisy.Block.t
   def deserialize_block_data(data) do
     Daisy.Data.Block.new(
-      previous_block_hash: data["previous_block_hash"] || "",
+      block_number: data["number"] |> String.to_integer,
+      parent_block_hash: data["parent_block_hash"] || "",
       initial_storage: data["initial_storage"],
       final_storage: data["final_storage"]
     )
@@ -243,15 +259,37 @@ defmodule Daisy.Serializer.JSONSerializer do
         "function" => "func",
         "args" => ["red", "tree"],
       }
+
+      iex> %Daisy.Data.Transaction{
+      ...>   invokation: %Daisy.Data.Invokation{
+      ...>     function: "func",
+      ...>     args: ["red", "tree"]
+      ...>   },
+      ...>   owner: <<1>>,
+      ...> }
+      ...> |> Daisy.Serializer.JSONSerializer.serialize_transaction()
+      %{
+        "function" => "func",
+        "args" => ["red", "tree"],
+        "owner" => "2"
+      }
   """
   @spec serialize_transaction(Daisy.Data.Transaction.t) :: %{}
   def serialize_transaction(transaction) do
-    %{
+    base = %{
       "function" => transaction.invokation.function,
-      "args" => transaction.invokation.args,
-      "signature" => transaction.signature.signature |> encode_58,
-      "public_key" => transaction.signature.public_key |> encode_58
+      "args" => transaction.invokation.args
     }
+
+    cond do
+      transaction.signature ->
+        base
+          |> Map.put("signature", encode_58(transaction.signature.signature))
+          |> Map.put("public_key", encode_58(transaction.signature.public_key))
+      transaction.owner ->
+        base
+          |> Map.put("owner", encode_58(transaction.owner))
+    end
   end
 
   @doc """
@@ -285,9 +323,10 @@ defmodule Daisy.Serializer.JSONSerializer do
         args: data["args"],
       ),
       signature: Daisy.Data.Signature.new(
-        signature: data["signature"] |> decode_58!(),
-        public_key: data["public_key"] |> decode_58!(),
-      )
+        signature: data["signature"] |> maybe_decode_58!() || "",
+        public_key: data["public_key"] |> maybe_decode_58!() || "",
+      ),
+      owner: data["owner"] |> maybe_decode_58!()
     )
   end
 

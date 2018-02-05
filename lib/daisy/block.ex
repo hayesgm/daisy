@@ -11,8 +11,6 @@ defmodule Daisy.Block do
   transactions which are included in a block, or `ipfs/<block_hash>/final_storage`
   to get the IPFS hash of the storage for the block.
   """
-  @serializer Daisy.Serializer.JSONSerializer
-
   @type block_hash :: Daisy.Storage.root_hash
 
   @doc """
@@ -23,7 +21,8 @@ defmodule Daisy.Block do
       iex> {:ok, storage_pid} = Daisy.Storage.start_link()
       iex> Daisy.Block.genesis_block(storage_pid)
       {:ok, %Daisy.Data.Block{
-        previous_block_hash: "",
+        block_number: 0,
+        parent_block_hash: "",
         initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
         final_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
         transactions: [],
@@ -34,6 +33,7 @@ defmodule Daisy.Block do
   def genesis_block(storage_pid) do
     with {:ok, initial_storage} <- Daisy.Storage.new(storage_pid) do
       {:ok, Daisy.Data.Block.new(
+        block_number: 0,
         initial_storage: initial_storage,
         final_storage: initial_storage,
         transactions: []
@@ -53,23 +53,32 @@ defmodule Daisy.Block do
       iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
       iex> Daisy.Block.new_block(block_hash, storage_pid, [])
       {:ok,
-        %Daisy.Data.Block{final_storage: "",
-        initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
-        previous_block_hash: "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26",
-        receipts: [],
-        transactions: []
+        %Daisy.Data.Block{
+          block_number: 1,
+          final_storage: "",
+          initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+          parent_block_hash: "QmYmR75UkB7qNXigPFrX9ajAs1QFHfWXyQRktB4Y5e1Vtr",
+          receipts: [],
+          transactions: []
       }}
 
       # TODO: Test with transactions
   """
   @spec new_block(block_hash, identifier(), [Daisy.Data.Transaction.t]) :: {:ok, Daisy.Data.Block.t} | {:error, any()}
-  def new_block(previous_block_hash, storage_pid, transactions) do
-    with {:ok, previous_block_final_storage} <- final_storage(previous_block_hash, storage_pid) do
-      {:ok, Daisy.Data.Block.new(
-        previous_block_hash: previous_block_hash,
-        initial_storage: previous_block_final_storage,
-        transactions: transactions
-      )}
+  def new_block(parent_block_hash, storage_pid, transactions) do
+    with {:ok, previous_block_final_storage} <- final_storage(parent_block_hash, storage_pid) do
+      with {:ok, previous_block_number} <- block_number(parent_block_hash, storage_pid) do
+        block_number = previous_block_number + 1
+
+        with {:ok, transaction_queue} <- Daisy.TransactionQueue.get_queue_for_block(storage_pid, parent_block_hash, block_number) do
+          {:ok, Daisy.Data.Block.new(
+            block_number: block_number,
+            parent_block_hash: parent_block_hash,
+            initial_storage: previous_block_final_storage,
+            transactions: transaction_queue ++ transactions,
+          )}
+        end
+      end
     end
   end
 
@@ -107,6 +116,27 @@ defmodule Daisy.Block do
   end
 
   @doc """
+  Retrieves just the block number of a block.
+
+  ## Examples
+
+      iex> {:ok, storage_pid} = Daisy.Storage.start_link()
+      iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
+      iex> block = %{genesis_block | block_number: 55}
+      iex> {:ok, block_hash} = Daisy.Block.save_block(block, storage_pid)
+      iex> Daisy.Block.block_number(block_hash, storage_pid)
+      {:ok, 55}
+  """
+  @spec block_number(block_hash, identifier()) :: {:ok, Daisy.Storage.root_hash} | {:error, any()}
+  def block_number(block_hash, storage_pid) do
+    case Daisy.Storage.get(storage_pid, block_hash, "block/number") do
+      {:ok, number} -> {:ok, number |> String.to_integer}
+      :not_found -> {:error, "cannot find block number in stored block `#{block_hash}`"}
+      els -> els
+    end
+  end
+
+  @doc """
   Helper function to process the block (run the transactions) and save the result
   to IPFS.
 
@@ -119,13 +149,14 @@ defmodule Daisy.Block do
       iex> Daisy.Block.process_and_save_block(new_block, storage_pid, Daisy.Examples.Test.Runner)
       {:ok,
         %Daisy.Data.Block{
-          previous_block_hash: "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26",
+          block_number: 1,
+          parent_block_hash: "QmYmR75UkB7qNXigPFrX9ajAs1QFHfWXyQRktB4Y5e1Vtr",
           initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
           final_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
           transactions: [],
           receipts: [],
         },
-        "QmdU2KH5vCFFdbWonT1GB7y15AZZoxsthViDuBLa5EwhAm"
+        "QmWbRKtTUQcHB7FU4nFP3LNXeY2EvctexYHoRi1rKizeof"
       }
   """
   @spec process_and_save_block(Daisy.Data.Block.t, identifier(), Daisy.Runner.runner) :: {:ok, Daisy.Data.Block.t, block_hash} | {:error, any()}
@@ -145,12 +176,12 @@ defmodule Daisy.Block do
       iex> {:ok, storage_pid} = Daisy.Storage.start_link()
       iex> {:ok, genesis_block} = Daisy.Block.genesis_block(storage_pid)
       iex> Daisy.Block.save_block(genesis_block, storage_pid)
-      {:ok, "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26"}
+      {:ok, "QmYmR75UkB7qNXigPFrX9ajAs1QFHfWXyQRktB4Y5e1Vtr"}
   """
   @spec save_block(Daisy.Data.Block.t, identifier()) :: {:ok, block_hash} | {:error, any()}
   def save_block(block, storage_pid) do
     with {:ok, new_root_hash} <- Daisy.Storage.new(storage_pid) do
-      serialized_block = @serializer.serialize(block)
+      serialized_block = Daisy.get_serializer().serialize(block)
 
       Daisy.Storage.put_all(
         storage_pid,
@@ -172,9 +203,10 @@ defmodule Daisy.Block do
       iex> {:ok, block_hash} = Daisy.Block.save_block(genesis_block, storage_pid)
       iex> Daisy.Block.load_block(storage_pid, block_hash)
       {:ok, %Daisy.Data.Block{
-        final_storage: nil,
-        initial_storage: nil,
-        previous_block_hash: "",
+        block_number: 0,
+        final_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+        initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+        parent_block_hash: "",
         receipts: [],
         transactions: []
       }}
@@ -182,7 +214,7 @@ defmodule Daisy.Block do
   @spec load_block(identifier(), block_hash) :: {:ok, Daisy.Data.Block.t} | {:error, any()}
   def load_block(storage_pid, block_hash) do
     with {:ok, values} <- Daisy.Storage.get_all(storage_pid, block_hash) do
-      {:ok, @serializer.deserialize(values)}
+      {:ok, Daisy.get_serializer().deserialize(values)}
     end
   end
 
@@ -220,7 +252,7 @@ defmodule Daisy.Block do
   """
   @spec process_block(Daisy.Data.Block.t, identifier(), Daisy.Runner.runner) :: {:ok, Daisy.Data.Block.t} | {:error, any()}
   def process_block(block, storage_pid, runner) do
-    result = Daisy.Runner.process_transactions(block.transactions, storage_pid, block.initial_storage, runner)
+    result = Daisy.Runner.process_transactions(block.transactions, storage_pid, block.initial_storage, block.block_number, runner)
 
     with {:ok, final_storage, receipts} <- result do
       {:ok, %{block | final_storage: final_storage, receipts: receipts}}
