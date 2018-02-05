@@ -11,6 +11,8 @@ defmodule Daisy.Storage do
   @type root_hash :: String.t
   @type data_hash :: String.t
 
+  @empty_data_proto <<8, 1>>
+
   def start_link(opts \\ []) do
     host = Keyword.get(opts, :host, "localhost")
     port = Keyword.get(opts, :port, "5001")
@@ -51,8 +53,12 @@ defmodule Daisy.Storage do
     {:reply, put_all_result, state}
   end
 
-  def handle_call({:get_all, root_hash}, _from, %{client: client}=state) do
-    get_all_result = ipfs_get_all(client, root_hash)
+  def handle_call({:get_all, root_hash, path}, _from, %{client: client}=state) do
+    # First, we'll walk down to path
+    get_all_result = with {:ok, data_hash} <- ipfs_get_hash(client, root_hash, path) do
+      # Then get all from there
+      ipfs_get_all(client, data_hash)
+    end
 
     {:reply, get_all_result, state}
   end
@@ -80,6 +86,14 @@ defmodule Daisy.Storage do
     get_result = ipfs_get(client, root_hash, path)
 
     {:reply, get_result, state}
+  end
+
+  def handle_call({:ls, root_hash, path}, _from, %{client: client}=state) do
+    ls_result = with :not_found <- ipfs_get_links(client, root_hash, path) do
+      {:ok, []}
+    end
+
+    {:reply, ls_result, state}
   end
 
   def handle_call({:update, root_hash, path, update_fn, default, run_update_fn_on_default}, _from, %{client: client}=state) do
@@ -207,7 +221,7 @@ defmodule Daisy.Storage do
     end)
   end
 
-  @spec ipfs_get_all(IPFS.Client.t, root_hash) :: {:ok, %{}} | {:error, any()}
+  @spec ipfs_get_all(IPFS.Client.t, root_hash) :: {:ok, %{}} | :not_found | {:error, any()}
   def ipfs_get_all(client, root_hash) do
     case do_ipfs_get_all(client, root_hash) do
       {:ok, map} when is_map(map) ->
@@ -221,7 +235,7 @@ defmodule Daisy.Storage do
   @spec do_ipfs_get_all(IPFS.Client.t, root_hash) :: {:ok, %{} | String.t} | {:error, any()}
   defp do_ipfs_get_all(client, root_hash) do
     case ipfs_retrieve_all(client, root_hash) do
-      {:ok, <<>>, links} ->
+      {:ok, data, links} when data == <<>> or data == @empty_data_proto ->
         # This can probably be parallelized
         Enum.reduce(links, {:ok, %{}}, fn
           {name, hash}, {:ok, map} ->
@@ -244,7 +258,7 @@ defmodule Daisy.Storage do
     end
   end
 
-  @spec ipfs_retrieve_all(IPFS.Client.t, data_hash) :: {:ok, String.t, [{String.t, String.t}]} | {:error, any()}
+  @spec ipfs_retrieve_all(IPFS.Client.t, data_hash) :: {:ok, String.t, [{String.t, data_hash}]} | {:error, any()}
   defp ipfs_retrieve_all(client, data_hash) do
     with {:ok, %IPFS.Client.Object{data: data, links: links}} <- IPFS.Client.object_get(client, data_hash) do
       simple_links = for link <- links do
@@ -264,7 +278,6 @@ defmodule Daisy.Storage do
 
   @spec ipfs_get(IPFS.Client.t, root_hash, String.t) :: {:ok, String.t} | :not_found | {:error, any()}
   defp ipfs_get(client, root_hash, path) do
-    IO.inspect(["Getting", client, root_hash, path])
     with {:ok, data_hash} <- ipfs_get_hash(client, root_hash, path) do
       with {:ok, data} <- ipfs_retrieve(client, data_hash) do
         {:ok, data}
@@ -278,6 +291,19 @@ defmodule Daisy.Storage do
     case walk_path(client, path, root_hash) do
       {:ok, [], _found_path, _found_objects, _found_links, data_hash} ->
         {:ok, data_hash}
+      {:ok, _looking_path, _found_path, _found_objects, _found_links, _data_hash} -> :not_found
+      els -> els
+    end
+  end
+
+  @spec ipfs_get_links(IPFS.Client.t, root_hash, String.t) :: {:ok, [{String.t, data_hash}]} | :not_found | {:error, any()}
+  defp ipfs_get_links(client, root_hash, path) do
+    # Note: This might be slow since we need to walk entire path to find file
+    case walk_path(client, path, root_hash) do
+      {:ok, [], _found_path, _found_objects, _found_links, data_hash} ->
+        with {:ok, _data, links} <- ipfs_retrieve_all(client, data_hash) do
+          {:ok, links}
+        end
       {:ok, _looking_path, _found_path, _found_objects, _found_links, _data_hash} -> :not_found
       els -> els
     end
@@ -322,9 +348,9 @@ defmodule Daisy.Storage do
     GenServer.call(server, {:get, root_hash, clean(path)})
   end
 
-  @spec get_all(identifier(), root_hash) :: {:ok, %{}} | {:error, any()}
-  def get_all(server, root_hash) do
-    GenServer.call(server, {:get_all, root_hash})
+  @spec get_all(identifier(), root_hash, String.t) :: {:ok, %{}} | {:error, any()}
+  def get_all(server, root_hash, path \\ "") do
+    GenServer.call(server, {:get_all, root_hash, clean(path)})
   end
 
   @spec proof(identifier(), root_hash, String.t) :: :ok | :not_found | {:error, any()}
@@ -353,6 +379,11 @@ defmodule Daisy.Storage do
     run_update_fn_on_default = Keyword.get(opts, :run_update_fn_on_default, false)
 
     GenServer.call(server, {:update, root_hash, clean(path), update_fn, default, run_update_fn_on_default})
+  end
+
+  @spec ls(identifier(), root_hash, String.t) :: {:ok, [{String.t, data_hash}]} | {:error, any()}
+  def ls(server, root_hash, path) do
+    GenServer.call(server, {:ls, root_hash, clean(path)})
   end
 
   # TODO: Test

@@ -11,5 +11,8 @@ message Invokation {
 
 message Transaction {
 	Invokation invokation = 1;
+
+	// This should be one-of?
 	Signature signature = 2;
+	bytes owner = 3;
 }

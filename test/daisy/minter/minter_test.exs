@@ -19,9 +19,10 @@ defmodule Daisy.MinterTest do
   describe "#get_block/1" do
     test "it returns the current block", %{minter_pid: minter_pid} do
       assert %Daisy.Data.Block{
+        block_number: 0,
         final_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
         initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
-        previous_block_hash: "",
+        parent_block_hash: "",
         receipts: [],
         transactions: []
       } == Minter.get_block(minter_pid)
@@ -35,7 +36,7 @@ defmodule Daisy.MinterTest do
       assert %Daisy.Data.Block{
         final_storage: "",
         initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
-        previous_block_hash: "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26",
+        parent_block_hash: "QmUatzSyhUCBeZvQEM8f56kSbrhEuguKESouHUoqsptz26",
         receipts: [],
         transactions: []
       } == Minter.get_block(minter_pid)
@@ -59,7 +60,7 @@ defmodule Daisy.MinterTest do
       block_hash = Minter.mine_block(minter_pid)
 
       assert %Daisy.Data.Block{
-        previous_block_hash: ^block_hash,
+        parent_block_hash: ^block_hash,
         receipts: [],
         transactions: []
       } = Minter.get_block(minter_pid)
@@ -89,14 +90,14 @@ defmodule Daisy.MinterTest do
 
       block_2 = Minter.get_block(minter_pid)
 
-      assert block_2.previous_block_hash != ""
+      assert block_2.parent_block_hash != ""
 
       :timer.sleep(600)
 
       block_3 = Minter.get_block(minter_pid)
 
-      assert block_3.previous_block_hash != ""
-      assert block_3.previous_block_hash != block_2.previous_block_hash
+      assert block_3.parent_block_hash != ""
+      assert block_3.parent_block_hash != block_2.parent_block_hash
     end
   end
 end
