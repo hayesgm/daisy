@@ -111,6 +111,8 @@ defmodule Daisy.Runner do
   Verifies an invokation is valid, returning, if valid, the public key
   of the signer.
 
+  TODO: Test queued owner transcations
+
   ## Examples
 
       iex> keypair = Daisy.RunnerTest.test_keypair()
@@ -124,6 +126,10 @@ defmodule Daisy.Runner do
       {:error, :invalid_signature}
   """
   @spec verify_invokation(Daisy.Data.Transaction.t) :: {:ok, binary()} | {:error, any()}
+  def verify_invokation(%Daisy.Data.Transaction{invokation: invokation, owner: owner}) when not is_nil(owner) and owner != <<>> do
+    {:ok, owner}
+  end
+
   def verify_invokation(%Daisy.Data.Transaction{invokation: invokation, signature: signature}) do
     invokation
     |> Daisy.Data.Invokation.encode()
