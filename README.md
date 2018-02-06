@@ -17,6 +17,14 @@ def deps do
 end
 ```
 
+## Starting Daisy
+
+To start Daisy in mining mode, run:
+
+```bash
+> mix daisy.miner
+```
+
 ## Design Mantras
 
 Daisy aims to be a side-chain. We have a few important design mantras to guide our process:
@@ -110,11 +118,11 @@ Daisy comes with a JSON-API to communicate with a node.
 
 ```bash
 # Read from current block
-curl http://localhost:2235/read/:my_func>/:my_arg_1/:my_arg_2/...
+curl http://localhost:2335/read/:my_func>/:my_arg_1/:my_arg_2/...
 {"result" => "good"}
 
 # Read from specified block
-curl http://localhost:2235/read/block/:block_hash/:my_func/:my_arg_1/:my_arg_2/...
+curl http://localhost:2335/read/block/:block_hash/:my_func/:my_arg_1/:my_arg_2/...
 {"result" => "good"}
 ```
 

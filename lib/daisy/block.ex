@@ -181,7 +181,7 @@ defmodule Daisy.Block do
   @spec save_block(Daisy.Data.Block.t, identifier()) :: {:ok, block_hash} | {:error, any()}
   def save_block(block, storage_pid) do
     with {:ok, new_root_hash} <- Daisy.Storage.new(storage_pid) do
-      serialized_block = Daisy.get_serializer().serialize(block)
+      serialized_block = Daisy.Config.get_serializer().serialize(block)
 
       Daisy.Storage.put_all(
         storage_pid,
@@ -214,7 +214,7 @@ defmodule Daisy.Block do
   @spec load_block(identifier(), block_hash) :: {:ok, Daisy.Data.Block.t} | {:error, any()}
   def load_block(storage_pid, block_hash) do
     with {:ok, values} <- Daisy.Storage.get_all(storage_pid, block_hash) do
-      {:ok, Daisy.get_serializer().deserialize(values)}
+      {:ok, Daisy.Config.get_serializer().deserialize(values)}
     end
   end
 
