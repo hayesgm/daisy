@@ -5,6 +5,7 @@ defmodule Daisy.API.Router do
   @reader Kitten.Reader
 
   plug Plug.Logger
+  plug Plug.Parsers, parsers: [:urlencoded, :multipart]
   plug :match
   plug :dispatch
 
@@ -15,10 +16,29 @@ defmodule Daisy.API.Router do
     end
   end
 
-  get "/run/:function/*args" do
+  get "/prepare/:function/*args" do
     invokation = Daisy.Data.Invokation.new(function: function, args: args)
-    keypair = Daisy.Signature.new_keypair()
-    transaction = Daisy.Keychain.sign_new_transaction(invokation, keypair)
+
+    send_resp(conn, 200, Daisy.Data.Invokation.encode(invokation) |> Base.encode64)
+  end
+
+  post "/run/:function/*args" do
+    IO.inspect(["body", conn.body_params])
+    invokation = Daisy.Data.Invokation.new(function: function, args: args)
+    signature = conn.body_params["signature"] |> Base.decode64!
+    public_key = conn.body_params["public_key"] |> Base.decode64!
+
+    IO.inspect(["Invokation", invokation, "signature", signature], limit: :infinity)
+
+    transaction = Daisy.Data.Transaction.new(
+      invokation: invokation,
+      signature: Daisy.Data.Signature.new(
+        signature: signature,
+        public_key: public_key
+      )
+    )
+
+    IO.inspect(["Transaction", transaction])
 
     _result_transaction = Daisy.Minter.add_transaction(Daisy.Minter, transaction)
 
