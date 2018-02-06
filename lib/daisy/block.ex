@@ -70,7 +70,7 @@ defmodule Daisy.Block do
       with {:ok, previous_block_number} <- block_number(parent_block_hash, storage_pid) do
         block_number = previous_block_number + 1
 
-        with {:ok, transaction_queue} <- Daisy.TransactionQueue.get_queue_for_block(storage_pid, parent_block_hash, block_number) do
+        with {:ok, transaction_queue} <- Daisy.TransactionQueue.get_queue_for_block(storage_pid, previous_block_final_storage, block_number) do
           {:ok, Daisy.Data.Block.new(
             block_number: block_number,
             parent_block_hash: parent_block_hash,

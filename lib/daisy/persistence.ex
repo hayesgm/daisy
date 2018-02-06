@@ -75,7 +75,7 @@ defmodule Daisy.Persistence do
 
   @spec ipns_publish(IPFS.Client.t, root_hash, key) :: {:ok, String.t, String.t} | {:error, any()}
   defp ipns_publish(client, root_hash, key) do
-    with {:ok, published} <- IPFS.Client.name_publish(client, root_hash, key: key) do
+    with {:ok, published} <- IPFS.Client.name_publish(client, root_hash, key: key, timeout: @timeout) do
       {:ok, published.name, published.value}
     end
   end
