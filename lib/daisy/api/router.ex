@@ -1,6 +1,8 @@
 defmodule Daisy.API.Router do
   use Plug.Router
 
+  require Logger
+
   # TODO: Replace
   @reader Kitten.Reader
 
@@ -23,26 +25,31 @@ defmodule Daisy.API.Router do
   end
 
   post "/run/:function/*args" do
-    IO.inspect(["body", conn.body_params])
     invokation = Daisy.Data.Invokation.new(function: function, args: args)
     signature = conn.body_params["signature"] |> Base.decode64!
-    public_key = conn.body_params["public_key"] |> Base.decode64!
+    public_key_result =
+      conn.body_params["public_key"]
+      |> Base.decode64!
+      |> Daisy.Signature.decode_der_public_key()
 
-    IO.inspect(["Invokation", invokation, "signature", signature], limit: :infinity)
+    case public_key_result do
+      {:error, _error} ->
+        send_resp(conn, 200, %{"result" => "error"} |> Poison.encode! |> Kernel.<>("\n"))
+      {:ok, public_key} ->
+        transaction = Daisy.Data.Transaction.new(
+          invokation: invokation,
+          signature: Daisy.Data.Signature.new(
+            signature: signature,
+            public_key: public_key
+          )
+        )
 
-    transaction = Daisy.Data.Transaction.new(
-      invokation: invokation,
-      signature: Daisy.Data.Signature.new(
-        signature: signature,
-        public_key: public_key
-      )
-    )
+        Logger.debug(fn -> "[#{__MODULE__}] Accepting transaction: #{inspect transaction, limit: :infinity})" end)
 
-    IO.inspect(["Transaction", transaction])
+        _result_transaction = Daisy.Minter.add_transaction(Daisy.Minter, transaction)
 
-    _result_transaction = Daisy.Minter.add_transaction(Daisy.Minter, transaction)
-
-    send_resp(conn, 200, %{"result" => "ok"} |> Poison.encode! |> Kernel.<>("\n"))
+        send_resp(conn, 200, %{"result" => "ok"} |> Poison.encode! |> Kernel.<>("\n"))
+    end
   end
 
   get "/read/block/:block_hash/:function/*args" do
