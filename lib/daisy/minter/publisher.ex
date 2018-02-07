@@ -48,9 +48,9 @@ defmodule Daisy.Publisher do
         Logger.info(fn -> "[#{__MODULE__}] Minted block with hash `#{final_block_hash}`, publishing..." end)
 
         case Daisy.Persistence.publish(Daisy.Persistence, final_block_hash) do
-          :ok ->
+          {:ok, name, value} ->
             # TODO: Add links in info
-            Logger.info(fn -> "[#{__MODULE__}] Published new block." end)
+            Logger.info(fn -> "[#{__MODULE__}] Published new block. name=#{name}, value=#{value}" end)
           {:error, error} ->
             # TODO: Add links in info
             Logger.error(fn -> "[#{__MODULE__}] Error pubishing new block: #{inspect error}" end)

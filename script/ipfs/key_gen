@@ -1,0 +1,8 @@
+#!/bin/bash
+
+if [ "$#" -lt 1 ]; then
+	printf "generates a new ipfs key\n\nusage:\n\tscript/ipfs/new_key <key_name>\n\n"
+	exit 1
+fi
+
+ipfs key gen -t rsa -s 3072 "$1"
