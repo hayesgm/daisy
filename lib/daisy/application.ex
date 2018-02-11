@@ -1,5 +1,6 @@
 defmodule Daisy.Application do
   use Application
+  require Logger
 
   def start(_type, _args) do
     runner = Daisy.Config.get_runner()
@@ -8,11 +9,10 @@ defmodule Daisy.Application do
 
     # TODO: Check that IPFS is up and available, when?
 
-    # Start Storage, Persistence and our Minter
+    # Start Storage, Persistence and a Tracker
     children = [
       Supervisor.Spec.worker(Daisy.Storage, [[name: Daisy.Storage]]),
-      Supervisor.Spec.worker(Daisy.Persistence, [[key_name: ipfs_key, name: Daisy.Persistence]]),
-      Supervisor.Spec.worker(Daisy.Minter, [Daisy.Storage, :resolve, runner, reader, [name: Daisy.Minter]]),
+      Supervisor.Spec.worker(Daisy.Persistence, [[key_name: ipfs_key, name: Daisy.Persistence]])
     ]
 
     # If running API, start API server
@@ -20,8 +20,10 @@ defmodule Daisy.Application do
       port = Daisy.Config.get_port()
       scheme = Daisy.Config.get_scheme()
 
+      Logger.info("Running API server at #{scheme}://localhost:#{port}/")
+
       [
-        Plug.Adapters.Cowboy.child_spec(:http, Daisy.API.Router, [], [port: port])
+        Plug.Adapters.Cowboy.child_spec(scheme, Daisy.API.Router, [], [port: port])
         | children
       ]
     else
@@ -29,13 +31,19 @@ defmodule Daisy.Application do
     end
 
     # If running miner, start publisher
-    children = if Daisy.Config.run_miner?() do
-      [
-        Supervisor.Spec.worker(Daisy.Publisher, [Daisy.Minter, [name: Daisy.Publisher]])
-        | children
-      ]
-    else
-      children
+    children = children ++ cond do
+      Daisy.Config.run_leader?() ->
+        [
+          Supervisor.Spec.worker(Daisy.Tracker, [Daisy.Storage, :resolve, runner, reader, [name: Daisy.Tracker]]),
+          Supervisor.Spec.worker(Daisy.Tracker.Leader, [Daisy.Tracker, [name: Daisy.Tracker.Leader]])
+        ]
+      Daisy.Config.run_follower?() ->
+        [
+          Supervisor.Spec.worker(Daisy.Tracker, [Daisy.Storage, :resolve, nil, reader, [name: Daisy.Tracker]]),
+          Supervisor.Spec.worker(Daisy.Tracker.Follower, [Daisy.Tracker, Daisy.Storage, [name: Daisy.Tracker.Follower]])
+        ]
+      true ->
+        []
     end
 
     Supervisor.start_link(children, strategy: :one_for_one)

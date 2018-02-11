@@ -4,12 +4,17 @@ defmodule Daisy.Config do
 
   @spec run_api? :: boolean()
   def run_api? do
-    Application.get_env(:daisy, :run_api, false) |> IO.inspect
+    Application.get_env(:daisy, :run_api, false)
   end
 
-  @spec run_miner? :: boolean()
-  def run_miner? do
-    Application.get_env(:daisy, :run_miner, false) |> IO.inspect
+  @spec run_leader? :: boolean()
+  def run_leader? do
+    Application.get_env(:daisy, :run_leader, false)
+  end
+
+  @spec run_follower? :: boolean()
+  def run_follower? do
+    Application.get_env(:daisy, :run_follower, false)
   end
 
   def get_runner(), do: Application.get_env(:daisy, :runner)
