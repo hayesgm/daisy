@@ -103,7 +103,7 @@ defmodule Daisy.Persistence do
   end
   defp get_key(_client, key_name, key_id), do: {:ok, %IPFS.Client.Key{name: key_name || "", id: key_id}}
 
-  @spec publish(identifier(), root_hash) :: :ok | {:error, any()}
+  @spec publish(identifier(), root_hash) :: {:ok, String.t, String.t} | {:error, any()}
   def publish(server, root_hash) do
     GenServer.call(server, {:publish, root_hash}, @timeout)
   end

@@ -23,7 +23,7 @@ defmodule Daisy.TransactionQueue do
         storage_pid,
         storage,
         "#{@storage_key}/#{block_number}/#{transaction_queue_count + 1}",
-        Daisy.get_serializer().serialize_transaction(transaction) |> Poison.encode!
+        Daisy.Config.get_serializer().serialize_transaction(transaction) |> Poison.encode!
       )
     end
   end
@@ -33,7 +33,7 @@ defmodule Daisy.TransactionQueue do
   """
   @spec get_queue_for_block(identifier(), Daisy.Storage.root_hash, integer()) :: {:ok, [Daisy.Data.Transaction.t]} | {:error, any()}
   def get_queue_for_block(storage_pid, storage, block_number) do
-    serializer = Daisy.get_serializer()
+    serializer = Daisy.Config.get_serializer()
 
     case Daisy.Storage.get_all(storage_pid, storage, "#{@storage_key}/#{block_number}") do
       {:ok, serialized_transaction_queue} ->
