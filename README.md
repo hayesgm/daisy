@@ -19,10 +19,22 @@ end
 
 ## Starting Daisy
 
-To start Daisy in mining mode, run:
+To start Daisy in leader mode, run:
 
 ```bash
-> mix daisy.miner
+> mix daisy.leader
+```
+
+or as a follower:
+
+```bash
+> mix daisy.follower
+```
+
+In either case, you can also start the REST API server:
+
+```bash
+> mix daisy.leader --api
 ```
 
 ## Design Mantras

@@ -1,4 +1,4 @@
-defmodule Daisy.Publisher do
+defmodule Daisy.Tracker.Leader do
   @moduledoc """
 
   """
@@ -10,7 +10,7 @@ defmodule Daisy.Publisher do
   }
 
   @interval 10_000
-  @mine_timeout 60_000
+  @resolve_timeout 60_000
 
   def start_link(minter_pid, opts \\ []) do
     name = Keyword.get(opts, :name, nil)
@@ -43,7 +43,7 @@ defmodule Daisy.Publisher do
     Logger.debug(fn -> "[#{__MODULE__}] Requesting new block to publish from minter..." end)
 
     # First, mine the block
-    case Daisy.Minter.mint_current_block(minter_pid) do
+    case Daisy.Tracker.mint_current_block(minter_pid) do
       {:ok, final_block_hash} ->
         Logger.info(fn -> "[#{__MODULE__}] Minted block with hash `#{final_block_hash}`, publishing..." end)
 
@@ -79,7 +79,7 @@ defmodule Daisy.Publisher do
   """
   @spec force_mine_block(identifier()) :: {:ok, Daisy.Block.block_hash} | {:error, any()}
   def force_mine_block(server) do
-    GenServer.call(server, {:mine_block, nil}, @mine_timeout)
+    GenServer.call(server, {:mine_block, nil}, @resolve_timeout)
   end
 
 end

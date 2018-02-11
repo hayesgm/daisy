@@ -12,7 +12,7 @@ defmodule Daisy.API.Router do
   plug :dispatch
 
   get "/read/:function/*args" do
-    case Daisy.Minter.read(Daisy.Minter, function, args) do
+    case Daisy.Tracker.read(Daisy.Tracker, function, args) do
       {:ok, result} -> send_resp(conn, 200, %{"result" => result} |> Poison.encode!)
       {:error, error} -> send_resp(conn, 500, inspect error)
     end
@@ -46,7 +46,7 @@ defmodule Daisy.API.Router do
 
         Logger.debug(fn -> "[#{__MODULE__}] Accepting transaction: #{inspect transaction, limit: :infinity})" end)
 
-        _result_transaction = Daisy.Minter.add_transaction(Daisy.Minter, transaction)
+        _result_transaction = Daisy.Tracker.add_transaction(Daisy.Tracker, transaction)
 
         send_resp(conn, 200, %{"result" => "ok"} |> Poison.encode! |> Kernel.<>("\n"))
     end
