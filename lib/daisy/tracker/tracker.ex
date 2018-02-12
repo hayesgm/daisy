@@ -101,7 +101,7 @@ defmodule Daisy.Tracker do
   defp server_mine_block(block, storage_pid, runner) do
     # First, finalize the block
     with {:ok, finalized_block, final_block_hash} <- Daisy.Block.Processor.process_and_save_block(block, storage_pid, runner) do
-      Logger.debug("[#{__MODULE__}] Minted block #{inspect finalized_block}")
+      Logger.debug("[#{__MODULE__}] Minted block #{inspect finalized_block} (/ipfs/#{final_block_hash})")
       # Finally, start a new block
       with {:ok, new_block} <- Daisy.Block.Builder.new_block(final_block_hash, storage_pid, []) do
         {:ok, final_block_hash, new_block}

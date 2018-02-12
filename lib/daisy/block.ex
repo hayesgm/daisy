@@ -27,7 +27,7 @@ defmodule Daisy.Block do
   """
   @spec final_storage(block_hash, identifier()) :: {:ok, Daisy.Storage.root_hash} | {:error, any()}
   def final_storage(block_hash, storage_pid) do
-    case read_data_from_block_hash(block_hash, storage_pid, "block/final_storage") do
+    case read_link_from_block_hash(block_hash, storage_pid, "final_storage_link") do
       {:ok, final_storage} -> {:ok, final_storage}
       :not_found -> Daisy.Storage.new(storage_pid)
       els -> els
@@ -48,7 +48,7 @@ defmodule Daisy.Block do
   """
   @spec block_number(block_hash, identifier()) :: {:ok, Daisy.Storage.root_hash} | {:error, any()}
   def block_number(block_hash, storage_pid) do
-    with {:ok, block_number} <- read_data_from_block_hash(block_hash, storage_pid, "block/number") do
+    with {:ok, block_number} <- read_data_from_block_hash(block_hash, storage_pid, "block_number") do
       {:ok, block_number |> String.to_integer}
     end
   end
@@ -56,6 +56,14 @@ defmodule Daisy.Block do
   # TODO: Make a public function?
   defp read_data_from_block_hash(block_hash, storage_pid, path) do
     case Daisy.Storage.get(storage_pid, block_hash, path) do
+      {:ok, value} -> {:ok, value}
+      :not_found -> {:error, "cannot find #{path} in stored block `#{block_hash}`"}
+      els -> els
+    end
+  end
+
+  defp read_link_from_block_hash(block_hash, storage_pid, path) do
+    case Daisy.Storage.get_hash(storage_pid, block_hash, path) do
       {:ok, value} -> {:ok, value}
       :not_found -> {:error, "cannot find #{path} in stored block `#{block_hash}`"}
       els -> els

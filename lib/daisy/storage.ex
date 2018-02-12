@@ -63,6 +63,13 @@ defmodule Daisy.Storage do
     {:reply, get_all_result, state}
   end
 
+  def handle_call({:get_hash, root_hash, path}, _from, %{client: client}=state) do
+    # First, we'll walk down to path
+    get_hash_result = ipfs_get_hash(client, root_hash, path)
+
+    {:reply, get_hash_result, state}
+  end
+
   def handle_call({:put_new, root_hash, path, data}, _from, %{client: client}=state) do
     # Note: This might be slow since we need to walk entire path to find file
     result = case walk_path(client, path, root_hash) do
@@ -166,7 +173,7 @@ defmodule Daisy.Storage do
 
   @spec ipfs_new(IPFS.Client.t) :: {:ok, root_hash} | {:error, any()}
   defp ipfs_new(client) do
-    with {:ok, %IPFS.Client.PatchObject{hash: root_hash}} <- IPFS.Client.object_new(client) do
+    with {:ok, %IPFS.Client.PatchObject{hash: root_hash}} <- IPFS.Client.object_put(client, @empty_data_proto, true) do
       {:ok, root_hash}
     end
   end
@@ -197,9 +204,13 @@ defmodule Daisy.Storage do
   @spec ipfs_put_all(IPFS.Client.t, root_hash, %{}) :: {:ok, binary()} | {:error, any()}
   def ipfs_put_all(client, root_hash, values) do
     Enum.reduce(values, {:ok, root_hash}, fn
-      {path, val}, {:ok, current_hash} when is_nil(val) or val == "" or val == %{} ->
+      {path, val}, {:ok, current_hash} when is_nil(val) or val == "" or val == %{} or val == {:link, ""} ->
         # Skip blank nodes / maps
         {:ok, current_hash}
+      {path, {:link, link}}, {:ok, current_hash} ->
+        # Directly put a link postfixed with _link
+        # TODO: Test
+        ipfs_add_link(client, current_hash, path <> "_link", link)
       {path, data}, {:ok, current_hash} when is_binary(data) ->
         # Put a simple value
         ipfs_put(client, current_hash, path, data)
@@ -239,8 +250,14 @@ defmodule Daisy.Storage do
         # This can probably be parallelized
         Enum.reduce(links, {:ok, %{}}, fn
           {name, hash}, {:ok, map} ->
-            with {:ok, result} = do_ipfs_get_all(client, hash) do
-              {:ok, Map.put(map, name, result)}
+            # TODO: Maybe come up with a smarter system
+            if String.ends_with?(name, "_link") do
+              # This just stips the `_link` suffix and does not recurse
+              {:ok, Map.put(map, String.replace_suffix(name, "_link", ""), {:link, hash})}
+            else
+              with {:ok, result} = do_ipfs_get_all(client, hash) do
+                {:ok, Map.put(map, name, result)}
+              end
             end
           _, {:error, error} -> {:error, error}
         end)
@@ -353,6 +370,11 @@ defmodule Daisy.Storage do
     GenServer.call(server, {:get_all, root_hash, clean(path)})
   end
 
+  @spec get_hash(identifier(), root_hash, String.t) :: {:ok, String.t} | :not_found | {:error, any()}
+  def get_hash(server, root_hash, path) do
+    GenServer.call(server, {:get_hash, root_hash, clean(path)})
+  end
+
   @spec proof(identifier(), root_hash, String.t) :: :ok | :not_found | {:error, any()}
   def proof(server, root_hash, path) do
     GenServer.call(server, {:proof, root_hash, clean(path)})
@@ -401,4 +423,5 @@ defmodule Daisy.Storage do
   @spec clean(String.t) :: String.t
   defp clean("/" <> path), do: path
   defp clean(path), do: path
+
 end

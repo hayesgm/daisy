@@ -2,6 +2,11 @@ defmodule Daisy.Config do
   @default_port 2335
   @default_scheme :http
 
+  @spec initial_block_reference :: any()
+  def initial_block_reference do
+    Application.get_env(:daisy, :initial_block_reference, :resolve)
+  end
+
   @spec run_api? :: boolean()
   def run_api? do
     Application.get_env(:daisy, :run_api, false)
