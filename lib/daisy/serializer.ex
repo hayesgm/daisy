@@ -1,4 +1,4 @@
-defmodule Daisy.Serializer.JSONSerializer do
+defmodule Daisy.Serializer do
   @moduledoc """
   Serializes and deserializes a block, including for transactions and receipts
   We push blocks to IPFS blockchain in the format of a unix-like file system.
@@ -59,7 +59,7 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...>     debug: "debug message"
       ...>   }]
       ...> }
-      ...> |> Daisy.Serializer.JSONSerializer.serialize()
+      ...> |> Daisy.Serializer.serialize()
       %{
         "block_number" => "5",
         "parent_block_hash" => {:link, "2"},
@@ -70,13 +70,13 @@ defmodule Daisy.Serializer.JSONSerializer do
             "signature" => "1111111111111111111111111111111111111111111111111111111111111112",
             "public_key" => "1111111111111111111111111111111111111111111111111111111111111116",
             "function" => "func",
-            "args" => ["red","tree"]
+            "args" => %{"0" => "red", "1" => "tree"}
           }
         },
         "receipts" => %{
           "0" => %{
             "status" => "0",
-            "logs" => ["log1","log2"],
+            "logs" => %{"0" => "log1", "1" => "log2"},
             "initial_storage" => {:link, "1"},
             "final_storage" => {:link, "2"},
             "debug" => "debug message"
@@ -86,13 +86,15 @@ defmodule Daisy.Serializer.JSONSerializer do
   """
   @spec serialize(Daisy.Data.Block.t) :: %{}
   def serialize(block) do
-    transaction_map = for {transaction, i} <- block.transactions |> Enum.with_index do
-      {"#{i}", serialize_transaction(transaction)}
-    end |> Enum.into(%{})
+    transaction_map =
+      block.transactions
+      |> Enum.map(&serialize_transaction/1)
+      |> serialize_array()
 
-    receipt_map = for {receipt, i} <- block.receipts |> Enum.with_index do
-      {"#{i}", serialize_receipt(receipt)}
-    end |> Enum.into(%{})
+    receipt_map =
+      block.receipts
+      |> Enum.map(&serialize_receipt/1)
+      |> serialize_array()
 
     serialize_block_data(block)
     |> Map.put("transactions", transaction_map)
@@ -116,20 +118,20 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...>       "signature" => "1111111111111111111111111111111111111111111111111111111111111112",
       ...>       "public_key" => "1111111111111111111111111111111111111111111111111111111111111116",
       ...>       "function" => "func",
-      ...>       "args" => ["red","tree"]
+      ...>       "args" => %{"0" => "red", "1" => "tree"}
       ...>     }
       ...>   },
       ...>   "receipts" => %{
       ...>     "0" => %{
       ...>       "status" => "0",
-      ...>       "logs" => ["log1","log2"],
+      ...>       "logs" => %{"0" => "log1", "1" => "log2"},
       ...>       "initial_storage" => {:link, "1"},
       ...>       "final_storage" => {:link, "2"},
       ...>       "debug" => "debug message"
       ...>     }
       ...>   },
       ...> }
-      ...> |> Daisy.Serializer.JSONSerializer.deserialize()
+      ...> |> Daisy.Serializer.deserialize()
       %Daisy.Data.Block{
         block_number: 6,
         parent_block_hash: "2",
@@ -142,7 +144,7 @@ defmodule Daisy.Serializer.JSONSerializer do
           },
           invokation: %Daisy.Data.Invokation{
             function: "func",
-            args: ["red", "tree"]
+            args: ["red","tree"]
           },
           owner: nil
         }],
@@ -150,7 +152,7 @@ defmodule Daisy.Serializer.JSONSerializer do
           status: 0,
           initial_storage: "1",
           final_storage: "2",
-          logs: ["log1", "log2"],
+          logs: ["log1","log2"],
           debug: "debug message"
         }]
       }
@@ -158,18 +160,14 @@ defmodule Daisy.Serializer.JSONSerializer do
   @spec deserialize(%{}) :: Daisy.Data.Block.t
   def deserialize(values) do
     transactions =
-      for {number, value} <- values["transactions"] || %{} do
-        {String.to_integer(number), deserialize_transaction(value)}
-      end
-      |> Enum.sort(fn {i,_}, {j,_} -> i < j end)
-      |> Enum.map(fn {_,v} -> v end)
+      values["transactions"]
+      |> deserialize_array()
+      |> Enum.map(&deserialize_transaction/1)
 
     receipts =
-      for {number, value} <- values["receipts"] || %{} do
-        {String.to_integer(number), deserialize_receipt(value)}
-      end
-      |> Enum.sort(fn {i,_}, {j,_} -> i < j end)
-      |> Enum.map(fn {_,v} -> v end)
+      values["receipts"]
+      |> deserialize_array()
+      |> Enum.map(&deserialize_receipt/1)
 
     block_data = deserialize_block_data(values)
 
@@ -192,7 +190,7 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...>   initial_storage: "3",
       ...>   final_storage: "4"
       ...> }
-      ...> |> Daisy.Serializer.JSONSerializer.serialize_block_data()
+      ...> |> Daisy.Serializer.serialize_block_data()
       %{
         "block_number" => "10",
         "parent_block_hash" => {:link, "2"},
@@ -223,7 +221,7 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...>   "initial_storage" => {:link, "3"},
       ...>   "final_storage" => {:link, "4"},
       ...> }
-      ...> |> Daisy.Serializer.JSONSerializer.deserialize_block_data()
+      ...> |> Daisy.Serializer.deserialize_block_data()
       Daisy.Data.Block.new(
         block_number: 55,
         parent_block_hash: "2",
@@ -256,12 +254,12 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...>     args: ["red", "tree"]
       ...>   }
       ...> }
-      ...> |> Daisy.Serializer.JSONSerializer.serialize_transaction()
+      ...> |> Daisy.Serializer.serialize_transaction()
       %{
         "signature" => "1111111111111111111111111111111111111111111111111111111111111112",
         "public_key" => "1111111111111111111111111111111111111111111111111111111111111116",
         "function" => "func",
-        "args" => ["red", "tree"],
+        "args" => %{"0" => "red", "1" => "tree"},
       }
 
       iex> %Daisy.Data.Transaction{
@@ -271,10 +269,10 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...>   },
       ...>   owner: <<1>>,
       ...> }
-      ...> |> Daisy.Serializer.JSONSerializer.serialize_transaction()
+      ...> |> Daisy.Serializer.serialize_transaction()
       %{
         "function" => "func",
-        "args" => ["red", "tree"],
+        "args" => %{"0" => "red", "1" => "tree"},
         "owner" => "2"
       }
   """
@@ -282,7 +280,7 @@ defmodule Daisy.Serializer.JSONSerializer do
   def serialize_transaction(transaction) do
     base = %{
       "function" => transaction.invokation.function,
-      "args" => transaction.invokation.args
+      "args" => serialize_array(transaction.invokation.args)
     }
 
     cond do
@@ -305,9 +303,9 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...>   "signature" => "1111111111111111111111111111111111111111111111111111111111111112",
       ...>   "public_key" => "1111111111111111111111111111111111111111111111111111111111111116",
       ...>   "function" => "func",
-      ...>   "args" => ["red", "tree"],
+      ...>   "args" => %{"0" => "red", "1" => "tree"},
       ...> }
-      ...> |> Daisy.Serializer.JSONSerializer.deserialize_transaction()
+      ...> |> Daisy.Serializer.deserialize_transaction()
       %Daisy.Data.Transaction{
         signature: %Daisy.Data.Signature{
           signature: <<1>>,
@@ -324,7 +322,7 @@ defmodule Daisy.Serializer.JSONSerializer do
     Daisy.Data.Transaction.new(
       invokation: Daisy.Data.Invokation.new(
         function: data["function"],
-        args: data["args"],
+        args: deserialize_array(data["args"]),
       ),
       signature: Daisy.Data.Signature.new(
         signature: data["signature"] |> maybe_decode_58!() || "",
@@ -346,12 +344,12 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...>   logs: ["log1", "log2"],
       ...>   debug: "debug message"
       ...> }
-      ...> |> Daisy.Serializer.JSONSerializer.serialize_receipt()
+      ...> |> Daisy.Serializer.serialize_receipt()
       %{
         "status" => "0",
         "initial_storage" => {:link, "1"},
         "final_storage" => {:link, "2"},
-        "logs" => ["log1", "log2"],
+        "logs" => %{"0" => "log1", "1" => "log2"},
         "debug" => "debug message"
       }
   """
@@ -361,7 +359,7 @@ defmodule Daisy.Serializer.JSONSerializer do
       "status" => receipt.status |> to_string,
       "initial_storage" => {:link, receipt.initial_storage},
       "final_storage" => {:link, receipt.final_storage},
-      "logs" => receipt.logs,
+      "logs" => serialize_array(receipt.logs),
       "debug" => receipt.debug
     }
   end
@@ -375,10 +373,10 @@ defmodule Daisy.Serializer.JSONSerializer do
       ...>   "status" => "0",
       ...>   "initial_storage" => {:link, "2"},
       ...>   "final_storage" => {:link, "3"},
-      ...>   "logs" => ["log1", "log2"],
+      ...>   "logs" => %{"0" => "log1", "1" => "log2"},
       ...>   "debug" => "debug message"
       ...> }
-      ...> |> Daisy.Serializer.JSONSerializer.deserialize_receipt()
+      ...> |> Daisy.Serializer.deserialize_receipt()
       %Daisy.Data.Receipt{
         status: 0,
         initial_storage: "2",
@@ -393,7 +391,7 @@ defmodule Daisy.Serializer.JSONSerializer do
       status: data["status"] |> String.to_integer,
       initial_storage: get_link!(data["initial_storage"]),
       final_storage: get_link!(data["final_storage"]),
-      logs: data["logs"],
+      logs: deserialize_array(data["logs"]),
       debug: data["debug"],
     )
   end
@@ -401,5 +399,21 @@ defmodule Daisy.Serializer.JSONSerializer do
   @spec get_link!({:link, String.t} | String.t) :: String.t
   defp get_link!({:link, link}), do: link
   defp get_link!(els), do: raise "expected link, got #{inspect els}"
+
+  defp serialize_array(nil), do: %{}
+  defp serialize_array(arr) do
+    arr
+    |> Enum.with_index
+    |> Enum.map(fn {k,v} -> {to_string(v), k} end)
+    |> Enum.into(%{})
+  end
+
+  defp deserialize_array(nil), do: []
+  defp deserialize_array(map) do
+    map
+    |> Enum.into([])
+    |> Enum.sort_by(fn {k, _v} -> String.to_integer(k) end)
+    |> Enum.map(fn {_k, v} -> v end)
+  end
 
 end
