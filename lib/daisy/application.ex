@@ -35,12 +35,12 @@ defmodule Daisy.Application do
     children = children ++ cond do
       Daisy.Config.run_leader?() ->
         [
-          Supervisor.Spec.worker(Daisy.Tracker, [Daisy.Storage, initial_block_reference, runner, reader, [name: Daisy.Tracker]]),
+          Supervisor.Spec.worker(Daisy.Tracker, [Daisy.Storage, initial_block_reference, :leader, runner, reader, [name: Daisy.Tracker]]),
           Supervisor.Spec.worker(Daisy.Tracker.Leader, [Daisy.Tracker, [name: Daisy.Tracker.Leader]])
         ]
       Daisy.Config.run_follower?() ->
         [
-          Supervisor.Spec.worker(Daisy.Tracker, [Daisy.Storage, initial_block_reference, nil, reader, [name: Daisy.Tracker]]),
+          Supervisor.Spec.worker(Daisy.Tracker, [Daisy.Storage, initial_block_reference, :follower, runner, reader, [name: Daisy.Tracker]]),
           Supervisor.Spec.worker(Daisy.Tracker.Follower, [Daisy.Tracker, Daisy.Storage, [name: Daisy.Tracker.Follower]])
         ]
       true ->

@@ -252,7 +252,8 @@ defmodule Daisy.Serializer do
       ...>   invokation: %Daisy.Data.Invokation{
       ...>     function: "func",
       ...>     args: ["red", "tree"]
-      ...>   }
+      ...>   },
+      ...>   owner: <<>>
       ...> }
       ...> |> Daisy.Serializer.serialize_transaction()
       %{
@@ -263,6 +264,10 @@ defmodule Daisy.Serializer do
       }
 
       iex> %Daisy.Data.Transaction{
+      ...>   signature: %Daisy.Data.Signature{
+      ...>     signature: <<>>,
+      ...>     public_key: <<>>
+      ...>   },
       ...>   invokation: %Daisy.Data.Invokation{
       ...>     function: "func",
       ...>     args: ["red", "tree"]
@@ -284,13 +289,13 @@ defmodule Daisy.Serializer do
     }
 
     cond do
-      transaction.signature ->
+      transaction.owner && transaction.owner != <<>> ->
+        base
+          |> Map.put("owner", encode_58(transaction.owner))
+      transaction.signature.signature && transaction.signature.signature != <<>> ->
         base
           |> Map.put("signature", encode_58(transaction.signature.signature))
           |> Map.put("public_key", encode_58(transaction.signature.public_key))
-      transaction.owner ->
-        base
-          |> Map.put("owner", encode_58(transaction.owner))
     end
   end
 

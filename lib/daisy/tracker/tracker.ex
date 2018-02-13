@@ -5,14 +5,16 @@ defmodule Daisy.Tracker do
   use GenServer
   require Logger
 
+  @type mode :: :leader | :follower
   @type state :: %{
     storage_pid: identifier(),
     block: Daisy.Data.Block.t,
     runner: module(),
-    reader: module()
+    reader: module(),
+    mode: mode
   }
 
-  def start_link(storage_pid, block_reference, runner, reader, opts \\ []) do
+  def start_link(storage_pid, block_reference, mode, runner, reader, opts \\ []) do
     name = Keyword.get(opts, :name, nil)
 
     gen_server_args = if name do
@@ -21,11 +23,11 @@ defmodule Daisy.Tracker do
       []
     end
 
-    GenServer.start_link(__MODULE__, {storage_pid, block_reference, runner, reader, opts}, gen_server_args)
+    GenServer.start_link(__MODULE__, {storage_pid, block_reference, mode, runner, reader, opts}, gen_server_args)
   end
 
-  @spec init({identifier(), Daisy.Block.block_reference | :genesis, module(), module(), keyword()}) :: {:ok, state}
-  def init({storage_pid, block_reference, runner, reader, _opts}) do
+  @spec init({identifier(), Daisy.Block.block_reference, mode, module(), module(), keyword()}) :: {:ok, state}
+  def init({storage_pid, block_reference, mode, runner, reader, _opts}) do
     Logger.info("[#{__MODULE__}] Bootstrapping block reference #{inspect block_reference}")
 
     block = case Daisy.Block.BlockStorage.load_block_reference(block_reference, storage_pid) do
@@ -38,6 +40,7 @@ defmodule Daisy.Tracker do
     {:ok, %{
       storage_pid: storage_pid,
       block: block,
+      mode: mode,
       runner: runner,
       reader: reader
     }}
@@ -46,8 +49,8 @@ defmodule Daisy.Tracker do
   ## Server
 
   # Adds a transaction to the current block (if we're a runner)
-  def handle_call({:add_transaction, transaction}, _from, %{block: block, storage_pid: storage_pid, runner: runner}=state) do
-    :ok = verify_runner(runner)
+  def handle_call({:add_transaction, transaction}, _from, %{block: block, mode: mode, storage_pid: storage_pid, runner: runner}=state) do
+    :ok = verify_leader(mode)
 
     updated_block = Daisy.Block.Processor.add_transaction(block, storage_pid, transaction)
 
@@ -68,8 +71,8 @@ defmodule Daisy.Tracker do
     {:reply, result, state}
   end
 
-  def handle_call({:new_block, new_block}, _from, state=%{block: block, storage_pid: storage_pid, runner: runner}) do
-    :ok = verify_reader(runner)
+  def handle_call({:new_block, new_block}, _from, state=%{block: block, mode: mode, storage_pid: storage_pid, runner: runner}) do
+    :ok = verify_follower(mode)
 
     {success, next_block} = case Daisy.Block.Chain.verify_block_chain(block, new_block, storage_pid, runner) do
       {:ok, new_block} ->
@@ -85,8 +88,8 @@ defmodule Daisy.Tracker do
   end
 
   # If we're a runner, we mint the current block and begin processing a new block
-  def handle_call(:mint_current_block, _from, %{block: block, storage_pid: storage_pid, runner: runner}=state) do
-    :ok = verify_runner(runner)
+  def handle_call(:mint_current_block, _from, %{block: block, mode: mode, storage_pid: storage_pid, runner: runner}=state) do
+    :ok = verify_leader(mode)
 
     case server_mine_block(block, storage_pid, runner) do
       {:ok, final_block_hash, new_block} ->
@@ -109,13 +112,13 @@ defmodule Daisy.Tracker do
     end
   end
 
-  @spec verify_runner(any()) :: :ok | :no_return
-  defp verify_runner(nil), do: raise "#{__MODULE__} running in viewer mode"
-  defp verify_runner(_), do: :ok
+  @spec verify_leader(mode) :: :ok | :no_return
+  defp verify_leader(:follower), do: raise "#{__MODULE__} running in follower mode"
+  defp verify_leader(:leader), do: :ok
 
-  @spec verify_reader(any()) :: :ok | :no_return
-  defp verify_reader(nil), do: :ok
-  defp verify_reader(_), do: raise "#{__MODULE__} running in runner mode"
+  @spec verify_follower(mode) :: :ok | :no_return
+  defp verify_follower(:follower), do: :ok
+  defp verify_follower(:leader), do: raise "#{__MODULE__} running in leader mode"
 
   ## Client
 
