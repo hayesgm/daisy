@@ -17,7 +17,7 @@ defmodule Mix.Tasks.Daisy.Leader do
     run_api = Keyword.get(parsed, :api, false)
     api_port = Keyword.get(parsed, :port, nil)
 
-    Application.put_env(:daisy, :api, run_api, persistent: true)
+    Application.put_env(:daisy, :run_api, run_api, persistent: true)
     Application.put_env(:daisy, :run_leader, true, persistent: true)
 
     if run_api && api_port do

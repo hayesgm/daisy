@@ -73,6 +73,8 @@ defmodule Daisy.Block.Chain do
   """
   @spec compare_blocks(Daisy.Data.Block.t, Daisy.Data.Block.t) :: :match | {:mismatch, [{atom(), any(), any()}]}
   def compare_blocks(block_a, block_b) do
+    IO.inspect(["Comparing", block_a, block_b])
+
     mismatches = Enum.reduce(Map.from_struct(block_a), [], fn {k, v1}, mismatches ->
       if (v2 = Map.get(block_b, k)) == v1 do
         mismatches

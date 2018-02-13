@@ -1,0 +1,36 @@
+#!/bin/bash
+
+set -euxo pipefail
+
+if [ ! "$#" -eq 1 ]; then
+	printf "runs a daisy transaction\n\nusage:\n\tscript/trx <cmd>/<arg0>/<arg1>/...\n\n"
+	exit 1
+fi
+
+cmd="$1"
+
+host="http://localhost:2335"
+daisy_folder=~/.daisy
+public_key_file=$daisy_folder/public_key.der
+private_key_file=$daisy_folder/private_key.pem
+
+if [ ! -f $public_key_file ]; then
+	printf "cannot find public key at $public_key_file\n\nplease run 'script/keys/new'\n\n"
+	exit 1
+fi
+
+if [ ! -f $private_key_file ]; then
+	printf "cannot find private key at $private_key_file\n\nplease run 'script/keys/new'\n\n"
+	exit 1
+fi
+
+public_key="$(cat $public_key_file | base64)"
+
+prepare="$(curl "http://localhost:2335/prepare/$cmd" -s)"
+
+signature="$(curl $host/prepare/$cmd -s \
+			| base64 -D \
+			| /usr/local/opt/openssl/bin/openssl dgst -sha256 -sign $private_key_file \
+			| base64)"
+
+curl -X POST "$host/run/$cmd" --data-urlencode "signature=$signature" --data-urlencode "public_key=$public_key"

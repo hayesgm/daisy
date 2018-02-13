@@ -13,8 +13,8 @@ defmodule Daisy.Block.Builder do
       iex> {:ok, storage_pid} = Daisy.Storage.start_link()
       iex> Daisy.Block.Builder.genesis_block(storage_pid)
       {:ok, %Daisy.Data.Block{
-        block_number: 0,
-        parent_block_hash: "",
+        block_number: 1,
+        parent_block_hash: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
         initial_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
         final_storage: "QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
         transactions: [],
@@ -25,7 +25,8 @@ defmodule Daisy.Block.Builder do
   def genesis_block(storage_pid) do
     with {:ok, initial_storage} <- Daisy.Storage.new(storage_pid) do
       {:ok, Daisy.Data.Block.new(
-        block_number: 0,
+        block_number: 1,
+        parent_block_hash: initial_storage,
         initial_storage: initial_storage,
         final_storage: initial_storage,
         transactions: []

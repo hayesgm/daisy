@@ -6,6 +6,7 @@ defmodule Daisy.Application do
     runner = Daisy.Config.get_runner()
     reader = Daisy.Config.get_reader()
     ipfs_key = Daisy.Config.get_ipfs_key()
+    initial_block_reference = Daisy.Config.initial_block_reference()
 
     # TODO: Check that IPFS is up and available, when?
 
@@ -34,12 +35,12 @@ defmodule Daisy.Application do
     children = children ++ cond do
       Daisy.Config.run_leader?() ->
         [
-          Supervisor.Spec.worker(Daisy.Tracker, [Daisy.Storage, :resolve, runner, reader, [name: Daisy.Tracker]]),
+          Supervisor.Spec.worker(Daisy.Tracker, [Daisy.Storage, initial_block_reference, :leader, runner, reader, [name: Daisy.Tracker]]),
           Supervisor.Spec.worker(Daisy.Tracker.Leader, [Daisy.Tracker, [name: Daisy.Tracker.Leader]])
         ]
       Daisy.Config.run_follower?() ->
         [
-          Supervisor.Spec.worker(Daisy.Tracker, [Daisy.Storage, :resolve, nil, reader, [name: Daisy.Tracker]]),
+          Supervisor.Spec.worker(Daisy.Tracker, [Daisy.Storage, initial_block_reference, :follower, runner, reader, [name: Daisy.Tracker]]),
           Supervisor.Spec.worker(Daisy.Tracker.Follower, [Daisy.Tracker, Daisy.Storage, [name: Daisy.Tracker.Follower]])
         ]
       true ->

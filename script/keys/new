@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set -eo pipefail
+
+if [ ! "$#" -eq 0 ]; then
+	printf "generates a daisy keys\n\nusage:\n\tscript/keys/new\n\n"
+	exit 1
+fi
+
+daisy_folder=~/.daisy
+
+echo "Generating keys to $daisy_folder"
+
+mkdir -p $daisy_folder
+
+/usr/local/opt/openssl/bin/openssl \
+	ecparam -genkey \
+	-name secp256k1 \
+	-noout \
+	-out $daisy_folder/private_key.pem
+
+/usr/local/opt/openssl/bin/openssl \
+	ec \
+	-in $daisy_folder/private_key.pem \
+	-pubout \
+	-outform DER \
+	-out $daisy_folder/public_key.der
+
